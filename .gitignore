@@ -1,0 +1,8 @@
+# Compiled binaries & object files
+*.exe
+*.o
+*.out
+
+# Local save / runtime files
+save_profile.txt
+test_profile_tmp.txt
