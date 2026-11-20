@@ -53,10 +53,14 @@ Sablay-1st-Sem-Edition/
 │   ├── icon.png             # Transparent 256x256 window/taskbar icon (cropped PNG)
 │   ├── icon.ico             # Windows Explorer .exe icon wrapper
 │   ├── app.rc               # Windows resource script embedding icon.ico
+│   ├── isko_idle.png        # Player idle sprite (36x36 PNG)
+│   ├── isko_run1.png        # Player run frame 1 (36x36 PNG)
+│   ├── isko_run2.png        # Player run frame 2 (36x36 PNG)
+│   ├── isko_jump.png        # Player jump sprite (36x36 PNG)
 │   └── README.txt           # Notes for optional stage1_bg.jpg & stage2_bg.jpg
 ├── include/game.h           # Shared structs, constants, SceneState enum, prototypes
 ├── src/core.c               # Pure C99 game logic: save/load, GWA engine, physics, puzzles
-├── src/main.c               # Raylib window, JPEG/sprite loading, 8-bit SFX, UI screens
+├── src/main.c               # Raylib window, JPEG/PNG loading, 8-bit SFX, UI screens
 ├── .gitignore               # Ignores compiled *.exe / *.o / *.res binaries & local saves
 └── Makefile                 # Strict C99 build (with windres icon) & --smoke-test script
 ```
@@ -86,8 +90,8 @@ Everything that went into building this Week 3 milestone, mapped to the actual p
 
 - **Main Window, Game Loop, Input & File Checks (`src/main.c`)**:
   - [raylib Cheatsheet (`rcore`)](https://www.raylib.com/cheatsheet/cheatsheet.html) and [raylib Examples (`core_basic_window.c`)](https://www.raylib.com/examples.html) — `InitWindow`, `SetWindowIcon`, `SetTargetFPS(60)`, `SetExitKey(KEY_NULL)`, `SetConfigFlags(FLAG_WINDOW_HIDDEN)` (for `--smoke-test`), `GetFrameTime`, `IsKeyPressed`/`IsKeyDown`, `IsMouseButtonPressed`, `GetMousePosition`, and `FileExists`.
-- **JPEG Backgrounds, Fallback Textures & Pixel Sprites (`loadBg`, `buildGrassTile`, `buildIskoSprite`, `makePixelTex`)**:
-  - [raylib Cheatsheet (`rtextures`)](https://www.raylib.com/cheatsheet/cheatsheet.html) and [raylib Examples (`textures_image_loading.c`, `textures_image_drawing.c`)](https://www.raylib.com/examples.html) — `LoadTexture`, `IsTextureValid`, `SetTextureFilter` (`TEXTURE_FILTER_BILINEAR` for `assets/*.jpg`, `TEXTURE_FILTER_POINT` for pixel-art sprites/tiles), `DrawTexturePro`, `UnloadTexture`, plus CPU-side `GenImageColor`, `ImageDrawRectangle`, `ImageDrawPixel`, `LoadTextureFromImage`, and `UnloadImage`.
+- **JPEG Backgrounds, Fallback Textures & PNG Sprites (`loadBg`, `loadSprite`, `buildGrassTile`, `makePixelTex`)**:
+  - [raylib Cheatsheet (`rtextures`)](https://www.raylib.com/cheatsheet/cheatsheet.html) and [raylib Examples (`textures_image_loading.c`, `textures_image_drawing.c`)](https://www.raylib.com/examples.html) — `LoadTexture`, `IsTextureValid`, `SetTextureFilter` (`TEXTURE_FILTER_BILINEAR` for `assets/*.jpg`, `TEXTURE_FILTER_POINT` for `assets/isko_*.png` and pixel tiles), `DrawTexturePro`, `UnloadTexture`, plus CPU-side `GenImageColor`, `ImageDrawRectangle`, `LoadTextureFromImage`, and `UnloadImage`.
   - Custom pixel-art Oblation + SABLAY title artwork saved at `assets/campus_bg.jpg` (`1024x576`).
 - **2D Shapes, Outlined Text & UI Screens (`drawOutlinedText`, `drawMenuOptions`, `drawSablayBox`, HUD & Modals)**:
   - [raylib Cheatsheet (`rshapes` & `rtext`)](https://www.raylib.com/cheatsheet/cheatsheet.html) — `DrawRectangle`, `DrawRectangleRec`, `DrawRectangleLines`, `DrawRectangleLinesEx`, `DrawLine`, `DrawCircle`, `CheckCollisionPointRec`, `DrawText`, `MeasureText`, and `TextFormat`.

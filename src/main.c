@@ -31,35 +31,15 @@ static Texture2D buildGrassTile(void) {
     return makePixelTex(img);
 }
 
-static Texture2D buildIskoSprite(int pose) {
-    Image img = GenImageColor(16, 20, BLANK);
-    Color cap   = {34, 102, 212, 255};
-    Color skin  = {244, 198, 158, 255};
-    Color shirt = {206, 56, 104, 255};
-    Color pants = {32, 66, 144, 255};
-
-    ImageDrawRectangle(&img, 4, 1, 8, 4, cap);
-    ImageDrawRectangle(&img, 4, 4, 10, 1, cap);
-    ImageDrawRectangle(&img, 4, 5, 8, 5, skin);
-    ImageDrawPixel(&img, 9, 6, BLACK);
-    ImageDrawRectangle(&img, 4, 10, 8, 5, shirt);
-
-    int left_arm_y = (pose >= 2) ? 8 : 10;
-    int right_arm_y = 10;
-    if (pose == 2) right_arm_y = 8;
-    else if (pose == 3) right_arm_y = 11;
-
-    ImageDrawRectangle(&img, 2, left_arm_y, 2, 4, skin);
-    ImageDrawRectangle(&img, 12, right_arm_y, 2, 4, skin);
-
-    if (pose == 1) {
-        ImageDrawRectangle(&img, 3, 15, 4, 5, pants);
-        ImageDrawRectangle(&img, 9, 15, 4, 4, pants);
-    } else {
-        ImageDrawRectangle(&img, 4, 15, 3, 5, pants);
-        ImageDrawRectangle(&img, 9, 15, 3, 5, pants);
+static Texture2D loadSprite(const char *path, Color fallback) {
+    if (FileExists(path)) {
+        Texture2D tex = LoadTexture(path);
+        if (IsTextureValid(tex)) {
+            SetTextureFilter(tex, TEXTURE_FILTER_POINT);
+            return tex;
+        }
     }
-    return makePixelTex(img);
+    return makePixelTex(GenImageColor(24, 30, fallback));
 }
 
 static Sound makeTone(float start_freq, float end_freq, float duration, int wave_type) {
@@ -382,15 +362,23 @@ static void drawGameScreen(const GameState *game, Texture2D stage_bg[2], Texture
 
     bool blink_visible = (player->invuln_timer <= 0.0f) || (((int)(player->invuln_timer * 14.0f) % 2) == 0);
     if (blink_visible) {
-        int pose = 0;
-        if (player->on_ladder) pose = 3;
-        else if (!player->is_grounded) pose = 2;
-        else if (fabsf(player->vx) > 10.0f) pose = player->anim_frame % 2;
+        int pose = 0; /* 0 = idle, 1 = run1, 2 = run2, 3 = jump */
+        if (!player->is_grounded && !player->on_ladder) {
+            pose = 3;
+        } else if (player->on_ladder) {
+            pose = (fabsf(player->vy) > 10.0f) ? (1 + player->anim_frame) : 3;
+        } else if (fabsf(player->vx) > 10.0f) {
+            pose = 1 + player->anim_frame;
+        }
 
         Texture2D tx = isko[pose];
         float src_w = player->facing_right ? (float)tx.width : -(float)tx.width;
-        DrawTexturePro(tx, (Rectangle){0, 0, src_w, (float)tx.height},
-                       (Rectangle){player->x - 2, player->y, player->w + 4, player->h}, (Vector2){0, 0}, 0.0f, WHITE);
+        float draw_w = (float)tx.width;
+        float draw_h = (float)tx.height;
+        float draw_x = player->x - (draw_w - player->w) * 0.5f;
+        float draw_y = player->y + player->h - draw_h;
+        DrawTexturePro(tx, (Rectangle){0, 0, src_w, draw_h},
+                       (Rectangle){draw_x, draw_y, draw_w, draw_h}, (Vector2){0, 0}, 0.0f, WHITE);
     }
 
     if (stage->banner_timer > 0.0f) {
@@ -501,10 +489,12 @@ int main(int argc, char **argv) {
         loadBg("assets/stage2_bg.jpg", (Color){22, 28, 66, 255})
     };
     Texture2D tile = buildGrassTile();
-    Texture2D isko[4];
-    for (int i = 0; i < 4; i++) {
-        isko[i] = buildIskoSprite(i);
-    }
+    Texture2D isko[4] = {
+        loadSprite("assets/isko_idle.png", MAROON),
+        loadSprite("assets/isko_run1.png", MAROON),
+        loadSprite("assets/isko_run2.png", MAROON),
+        loadSprite("assets/isko_jump.png", MAROON)
+    };
 
     Sound sfx[SFX_COUNT] = {0};
     if (audio_ok) {

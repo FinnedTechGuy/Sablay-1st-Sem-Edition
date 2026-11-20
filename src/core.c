@@ -379,7 +379,7 @@ static void movePlayerY(GameState *game, Stage *stage, Player *player, float pre
 
     player->anim_timer += dt;
     if (player->anim_timer >= 0.12f) {
-        player->anim_frame = (player->anim_frame + 1) % 3;
+        player->anim_frame = (player->anim_frame + 1) % 2;
         player->anim_timer = 0.0f;
     }
 }

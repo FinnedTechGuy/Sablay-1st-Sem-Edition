@@ -14,4 +14,5 @@ test: sablay_week3.exe
 	./sablay_week3.exe --smoke-test
 
 clean:
-	rm -f sablay_week3.exe app.res
+	if exist sablay_week3.exe del /f /q sablay_week3.exe
+	if exist app.res del /f /q app.res
