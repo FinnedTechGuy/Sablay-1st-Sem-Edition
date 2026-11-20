@@ -32,15 +32,13 @@ Hey! This is our Week 3 progress build for **SABLAY**, a retro UP Tacloban campu
 
 ---
 
-## Controls & Demo Shortcuts
+## Controls
 
 - `A / D` or `Left / Right`: Move & push the crate
 - `W / Space / Up`: Jump (or climb up ladders)
 - `S / Down`: Climb down ladders
 - `Enter / Space / E`: Select menu items / confirm briefing
 - `Esc / P` (or click the top-right gear): Pause / Settings
-- `F9`: Preview Game Over (`DROPPED`) screen
-- `F10`: Preview Victory screen
 
 ---
 

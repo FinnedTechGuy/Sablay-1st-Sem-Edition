@@ -385,7 +385,7 @@ static void drawGameScreen(const GameState *game, Texture2D stage_bg[2], Texture
         DrawRectangle((SCREEN_W - 560) / 2, HUD_H + 8, 560, 28, (Color){12, 14, 22, 200});
         drawCenteredText(stage->banner, HUD_H + 13, 17, GOLD, BLACK);
     }
-    drawOutlinedText("WASD/ARROWS: Move | SPACE: Jump | ESC/P: Pause | F9/F10: Demo", 20, SCREEN_H - 20, 12, RAYWHITE, BLACK);
+    drawOutlinedText("WASD/ARROWS: Move | SPACE: Jump | ESC/P: Pause", 20, SCREEN_H - 20, 12, RAYWHITE, BLACK);
 
     /* Top 64px checkerboard HUD */
     for (int y = 0; y < HUD_H; y += 8) {
@@ -512,26 +512,6 @@ int main(int argc, char **argv) {
         float dt = GetFrameTime();
         if (dt <= 0.0f) dt = 1.0f / 60.0f;
         game.global_timer += dt;
-
-        /* Demo shortcuts */
-        if (IsKeyPressed(KEY_F9)) {
-            game.isko.gwa = 5.0f;
-            game.isko.slips = 3;
-            game.paused = false;
-            game.gameover_cursor = 0;
-            game.scene = SCENE_GAMEOVER;
-            game.play_sfx[SFX_GAMEOVER] = true;
-        }
-        if (IsKeyPressed(KEY_F10)) {
-            if (game.isko.gwa >= 4.99f) game.isko.gwa = 1.85f;
-            if (game.total_score <= 0) game.total_score = 3240;
-            if (game.total_score > game.best_score) game.best_score = game.total_score;
-            if (game.isko.gwa < game.best_gwa) game.best_gwa = game.isko.gwa;
-            saveProfile(&game, SAVE_PATH);
-            game.paused = false;
-            game.scene = SCENE_VICTORY;
-            game.play_sfx[SFX_CLEAR] = true;
-        }
 
         bool up = IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W);
         bool down = IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S);
