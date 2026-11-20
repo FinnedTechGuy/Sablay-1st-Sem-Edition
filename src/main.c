@@ -13,15 +13,10 @@ static Texture2D makePixelTex(Image img) {
     return tex;
 }
 
-static Texture2D loadBg(const char *path, Color fallback) {
-    if (FileExists(path)) {
-        Texture2D tex = LoadTexture(path);
-        if (IsTextureValid(tex)) {
-            SetTextureFilter(tex, TEXTURE_FILTER_BILINEAR);
-            return tex;
-        }
-    }
-    return makePixelTex(GenImageColor(1, 1, fallback));
+static Texture2D loadFilteredTex(const char *path, int filter) {
+    Texture2D tex = LoadTexture(path);
+    SetTextureFilter(tex, filter);
+    return tex;
 }
 
 static Texture2D buildGrassTile(void) {
@@ -29,17 +24,6 @@ static Texture2D buildGrassTile(void) {
     ImageDrawRectangle(&img, 0, 0, 16, 5, (Color){62, 164, 58, 255});
     ImageDrawRectangle(&img, 0, 0, 16, 2, (Color){106, 206, 82, 255});
     return makePixelTex(img);
-}
-
-static Texture2D loadSprite(const char *path, Color fallback) {
-    if (FileExists(path)) {
-        Texture2D tex = LoadTexture(path);
-        if (IsTextureValid(tex)) {
-            SetTextureFilter(tex, TEXTURE_FILTER_POINT);
-            return tex;
-        }
-    }
-    return makePixelTex(GenImageColor(24, 30, fallback));
 }
 
 static Sound makeTone(float start_freq, float end_freq, float duration, int wave_type) {
@@ -483,17 +467,17 @@ int main(int argc, char **argv) {
     bool audio_ok = IsAudioDeviceReady();
     if (audio_ok) SetMasterVolume((float)game.master_volume / 100.0f);
 
-    Texture2D bg = loadBg("assets/campus_bg.jpg", (Color){42, 68, 96, 255});
+    Texture2D bg = loadFilteredTex("assets/campus_bg.jpg", TEXTURE_FILTER_BILINEAR);
     Texture2D stage_bg[2] = {
-        loadBg("assets/stage1_bg.jpg", (Color){126, 188, 232, 255}),
-        loadBg("assets/stage2_bg.jpg", (Color){22, 28, 66, 255})
+        loadFilteredTex("assets/stage1_bg.jpg", TEXTURE_FILTER_BILINEAR),
+        loadFilteredTex("assets/stage2_bg.jpg", TEXTURE_FILTER_BILINEAR)
     };
     Texture2D tile = buildGrassTile();
     Texture2D isko[4] = {
-        loadSprite("assets/isko_idle.png", MAROON),
-        loadSprite("assets/isko_run1.png", MAROON),
-        loadSprite("assets/isko_run2.png", MAROON),
-        loadSprite("assets/isko_jump.png", MAROON)
+        loadFilteredTex("assets/isko_idle.png", TEXTURE_FILTER_POINT),
+        loadFilteredTex("assets/isko_run1.png", TEXTURE_FILTER_POINT),
+        loadFilteredTex("assets/isko_run2.png", TEXTURE_FILTER_POINT),
+        loadFilteredTex("assets/isko_jump.png", TEXTURE_FILTER_POINT)
     };
 
     Sound sfx[SFX_COUNT] = {0};

@@ -24,7 +24,7 @@ Hey! This is our Week 3 progress build for **SABLAY**, a retro UP Tacloban campu
 
 ## Devlog: Bugs & Fixes Along the Way
 
-- **Removing the huge hardcoded background code**: Originally `src/main.c` painted the entire Oblation campus pixel-by-pixel in `buildCampusBg()` plus drew stage gradients/stars manually. We replaced that with a small `loadBg()` helper that loads `.jpg` files from `assets/` and falls back to a `1x1` solid color texture if a stage background isn't added yet.
+- **Removing the huge hardcoded background code**: Originally `src/main.c` painted the entire Oblation campus pixel-by-pixel in `buildCampusBg()` plus drew stage gradients/stars manually. We replaced all of that with `loadFilteredTex()` loading `assets/campus_bg.jpg`, `assets/stage1_bg.jpg`, and `assets/stage2_bg.jpg` directly.
 - **Main Menu readability without a dark box**: After switching to `assets/campus_bg.jpg`, the bright speckled pedestal behind `NEW GAME / CONTINUE / SETTINGS / EXIT` made thin text hard to read, while a translucent black rectangle looked too boxy. Switching `drawOutlinedText()` to an 8-direction outline + drop shadow and giving `drawMenuOptions()` a double black halo kept the text crisp with zero box behind it.
 - **`ESC` quitting the whole game**: Raylib closes the window on `ESC` by default, so we added `SetExitKey(KEY_NULL)` in `src/main.c` and handled `ESC` ourselves for Pause and Settings.
 - **Corner snags & one-way platforms**: Checking X and Y collisions together made Isko catch on platform corners. Splitting collision into X-first then Y-first—and only landing on thin ledges (`h < 24px`) while falling (`vy >= 0` with previous feet above the ledge)—fixed jumping up through platforms.
@@ -48,6 +48,8 @@ Hey! This is our Week 3 progress build for **SABLAY**, a retro UP Tacloban campu
 Sablay-1st-Sem-Edition/
 ├── assets/
 │   ├── campus_bg.jpg        # Main Menu + Settings/Briefing/Endings backdrop (1024x576)
+│   ├── stage1_bg.jpg        # Stage 1 (NSTP 1) playfield backdrop
+│   ├── stage2_bg.jpg        # Stage 2 (Science 10) playfield backdrop
 │   ├── icon.png             # Transparent 256x256 window/taskbar icon (cropped PNG)
 │   ├── icon.ico             # Windows Explorer .exe icon wrapper
 │   ├── app.rc               # Windows resource script embedding icon.ico
@@ -55,15 +57,13 @@ Sablay-1st-Sem-Edition/
 │   ├── isko_run1.png        # Player run frame 1 (36x36 PNG)
 │   ├── isko_run2.png        # Player run frame 2 (36x36 PNG)
 │   ├── isko_jump.png        # Player jump sprite (36x36 PNG)
-│   └── README.txt           # Notes for optional stage1_bg.jpg & stage2_bg.jpg
+│   └── README.txt           # Asset inventory notes
 ├── include/game.h           # Shared structs, constants, SceneState enum, prototypes
 ├── src/core.c               # Pure C99 game logic: save/load, GWA engine, physics, puzzles
 ├── src/main.c               # Raylib window, JPEG/PNG loading, 8-bit SFX, UI screens
 ├── .gitignore               # Ignores compiled *.exe / *.o / *.res binaries & local saves
 └── Makefile                 # Strict C99 build (with windres icon) & --smoke-test script
 ```
-
-*(Optional `assets/stage1_bg.jpg` and `assets/stage2_bg.jpg` at `960x512` can also be dropped into `assets/`—if missing, the game automatically uses a solid color fallback so it never crashes.)*
 
 ---
 
@@ -88,8 +88,8 @@ Everything that went into building this Week 3 milestone, mapped to the actual p
 
 - **Main Window, Game Loop, Input & File Checks (`src/main.c`)**:
   - [raylib Cheatsheet (`rcore`)](https://www.raylib.com/cheatsheet/cheatsheet.html) and [raylib Examples (`core_basic_window.c`)](https://www.raylib.com/examples.html) — `InitWindow`, `SetWindowIcon`, `SetTargetFPS(60)`, `SetExitKey(KEY_NULL)`, `SetConfigFlags(FLAG_WINDOW_HIDDEN)` (for `--smoke-test`), `GetFrameTime`, `IsKeyPressed`/`IsKeyDown`, `IsMouseButtonPressed`, `GetMousePosition`, and `FileExists`.
-- **JPEG Backgrounds, Fallback Textures & PNG Sprites (`loadBg`, `loadSprite`, `buildGrassTile`, `makePixelTex`)**:
-  - [raylib Cheatsheet (`rtextures`)](https://www.raylib.com/cheatsheet/cheatsheet.html) and [raylib Examples (`textures_image_loading.c`, `textures_image_drawing.c`)](https://www.raylib.com/examples.html) — `LoadTexture`, `IsTextureValid`, `SetTextureFilter` (`TEXTURE_FILTER_BILINEAR` for `assets/*.jpg`, `TEXTURE_FILTER_POINT` for `assets/isko_*.png` and pixel tiles), `DrawTexturePro`, `UnloadTexture`, plus CPU-side `GenImageColor`, `ImageDrawRectangle`, `LoadTextureFromImage`, and `UnloadImage`.
+- **JPEG Backgrounds & PNG Sprites (`loadFilteredTex`, `buildGrassTile`, `makePixelTex`)**:
+  - [raylib Cheatsheet (`rtextures`)](https://www.raylib.com/cheatsheet/cheatsheet.html) and [raylib Examples (`textures_image_loading.c`, `textures_image_drawing.c`)](https://www.raylib.com/examples.html) — `LoadTexture`, `SetTextureFilter` (`TEXTURE_FILTER_BILINEAR` for `assets/*.jpg`, `TEXTURE_FILTER_POINT` for `assets/isko_*.png` and pixel tiles), `DrawTexturePro`, `UnloadTexture`, plus CPU-side `GenImageColor`, `ImageDrawRectangle`, `LoadTextureFromImage`, and `UnloadImage`.
   - Custom pixel-art Oblation + SABLAY title artwork saved at `assets/campus_bg.jpg` (`1024x576`).
 - **2D Shapes, Outlined Text & UI Screens (`drawOutlinedText`, `drawMenuOptions`, `drawSablayBox`, HUD & Modals)**:
   - [raylib Cheatsheet (`rshapes` & `rtext`)](https://www.raylib.com/cheatsheet/cheatsheet.html) — `DrawRectangle`, `DrawRectangleRec`, `DrawRectangleLines`, `DrawRectangleLinesEx`, `DrawLine`, `DrawCircle`, `CheckCollisionPointRec`, `DrawText`, `MeasureText`, and `TextFormat`.
