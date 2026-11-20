@@ -55,7 +55,7 @@ Sablay-1st-Sem-Edition/
 │   ├── isko_run1.png        # Player run frame 1 (36x36 PNG)
 │   ├── isko_run2.png        # Player run frame 2 (36x36 PNG)
 │   ├── isko_jump.png        # Player jump sprite (36x36 PNG)
-│   └── README.txt           # Notes for optional stage1_bg.jpg & stage2_bg.jpg
+│   └── README.txt           # Notes for optional stage1_bg.png & stage2_bg.png
 ├── include/game.h           # Shared structs, constants, SceneState enum, prototypes
 ├── src/core.c               # Pure C99 game logic: save/load, GWA engine, physics, puzzles
 ├── src/main.c               # Raylib window, JPEG/PNG loading, 8-bit SFX, UI screens
@@ -63,7 +63,7 @@ Sablay-1st-Sem-Edition/
 └── Makefile                 # Strict C99 build (with windres icon) & --smoke-test script
 ```
 
-*(Optional `assets/stage1_bg.jpg` and `assets/stage2_bg.jpg` at `960x512` can also be dropped into `assets/`—if missing, the game automatically uses a solid color fallback so it never crashes.)*
+*(Optional `assets/stage1_bg.png` and `assets/stage2_bg.png` at `960x512` can also be dropped into `assets/`—if missing, the game automatically uses a solid color fallback so it never crashes.)*
 
 ---
 

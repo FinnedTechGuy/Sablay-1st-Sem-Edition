@@ -485,8 +485,8 @@ int main(int argc, char **argv) {
 
     Texture2D bg = loadBg("assets/campus_bg.jpg", (Color){42, 68, 96, 255});
     Texture2D stage_bg[2] = {
-        loadBg("assets/stage1_bg.jpg", (Color){126, 188, 232, 255}),
-        loadBg("assets/stage2_bg.jpg", (Color){22, 28, 66, 255})
+        loadBg("assets/stage1_bg.png", (Color){126, 188, 232, 255}),
+        loadBg("assets/stage2_bg.png", (Color){22, 28, 66, 255})
     };
     Texture2D tile = buildGrassTile();
     Texture2D isko[4] = {
