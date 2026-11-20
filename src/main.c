@@ -4,332 +4,617 @@
 #include <stdio.h>
 #include <string.h>
 
-static Texture2D makeTex(Image img) {
-    Texture2D t = LoadTextureFromImage(img);
-    SetTextureFilter(t, TEXTURE_FILTER_POINT);
+/* ---------- Asset & Texture Helpers ---------- */
+
+static Texture2D makePixelTex(Image img) {
+    Texture2D tex = LoadTextureFromImage(img);
+    SetTextureFilter(tex, TEXTURE_FILTER_POINT);
     UnloadImage(img);
-    return t;
+    return tex;
 }
 
 static Texture2D loadBg(const char *path, Color fallback) {
     if (FileExists(path)) {
-        Texture2D t = LoadTexture(path);
-        if (IsTextureValid(t)) { SetTextureFilter(t, TEXTURE_FILTER_BILINEAR); return t; }
+        Texture2D tex = LoadTexture(path);
+        if (IsTextureValid(tex)) {
+            SetTextureFilter(tex, TEXTURE_FILTER_BILINEAR);
+            return tex;
+        }
     }
-    return makeTex(GenImageColor(1, 1, fallback));
+    return makePixelTex(GenImageColor(1, 1, fallback));
+}
+
+static Texture2D buildGrassTile(void) {
+    Image img = GenImageColor(16, 16, (Color){126, 78, 44, 255});
+    ImageDrawRectangle(&img, 0, 0, 16, 5, (Color){62, 164, 58, 255});
+    ImageDrawRectangle(&img, 0, 0, 16, 2, (Color){106, 206, 82, 255});
+    return makePixelTex(img);
 }
 
 static Texture2D buildIskoSprite(int pose) {
     Image img = GenImageColor(16, 20, BLANK);
-    Color cap = {34, 102, 212, 255}, skin = {244, 198, 158, 255};
-    Color shirt = {206, 56, 104, 255}, pants = {32, 66, 144, 255};
-    ImageDrawRectangle(&img, 4, 1, 8, 4, cap); ImageDrawRectangle(&img, 4, 4, 10, 1, cap);
-    ImageDrawRectangle(&img, 4, 5, 8, 5, skin); ImageDrawPixel(&img, 9, 6, BLACK);
+    Color cap   = {34, 102, 212, 255};
+    Color skin  = {244, 198, 158, 255};
+    Color shirt = {206, 56, 104, 255};
+    Color pants = {32, 66, 144, 255};
+
+    ImageDrawRectangle(&img, 4, 1, 8, 4, cap);
+    ImageDrawRectangle(&img, 4, 4, 10, 1, cap);
+    ImageDrawRectangle(&img, 4, 5, 8, 5, skin);
+    ImageDrawPixel(&img, 9, 6, BLACK);
     ImageDrawRectangle(&img, 4, 10, 8, 5, shirt);
-    ImageDrawRectangle(&img, 2, (pose >= 2) ? 8 : 10, 2, 4, skin);
-    ImageDrawRectangle(&img, 12, (pose == 3) ? 11 : (pose == 2 ? 8 : 10), 2, 4, skin);
-    ImageDrawRectangle(&img, pose == 1 ? 3 : 4, 15, pose == 1 ? 4 : 3, 5, pants);
-    ImageDrawRectangle(&img, 9, 15, pose == 1 ? 4 : 3, pose == 1 ? 4 : 5, pants);
-    return makeTex(img);
+
+    int left_arm_y = (pose >= 2) ? 8 : 10;
+    int right_arm_y = 10;
+    if (pose == 2) right_arm_y = 8;
+    else if (pose == 3) right_arm_y = 11;
+
+    ImageDrawRectangle(&img, 2, left_arm_y, 2, 4, skin);
+    ImageDrawRectangle(&img, 12, right_arm_y, 2, 4, skin);
+
+    if (pose == 1) {
+        ImageDrawRectangle(&img, 3, 15, 4, 5, pants);
+        ImageDrawRectangle(&img, 9, 15, 4, 4, pants);
+    } else {
+        ImageDrawRectangle(&img, 4, 15, 3, 5, pants);
+        ImageDrawRectangle(&img, 9, 15, 3, 5, pants);
+    }
+    return makePixelTex(img);
 }
 
-static Sound makeTone(float f0, float f1, float dur, int wave) {
-    const unsigned int sr = 22050, n = (unsigned int)(dur * 22050);
-    short *buf = (short *)MemAlloc(n * sizeof(short));
-    float ph = 0;
-    for (unsigned int i = 0; i < n && buf; i++) {
-        float t = (float)i / n;
-        ph += (f0 + (f1 - f0) * t) / sr;
-        if (ph >= 1) ph -= floorf(ph);
-        float s = wave == 0 ? (ph < 0.5f ? 1.0f : -1.0f)
-                : (wave == 1 ? (1.0f - 4.0f * fabsf(ph - 0.5f))
-                             : (((i * 1103515245u) & 0x4000u) ? 0.8f : -0.8f));
-        buf[i] = (short)(s * (1.0f - t) * 8500.0f);
+static Sound makeTone(float start_freq, float end_freq, float duration, int wave_type) {
+    const unsigned int sample_rate = 22050;
+    const unsigned int sample_count = (unsigned int)(duration * 22050.0f);
+    short *samples = (short *)MemAlloc(sample_count * sizeof(short));
+    float phase = 0.0f;
+
+    for (unsigned int i = 0; i < sample_count && samples != NULL; i++) {
+        float progress = (float)i / (float)sample_count;
+        float freq = start_freq + (end_freq - start_freq) * progress;
+        phase += freq / (float)sample_rate;
+        if (phase >= 1.0f) {
+            phase -= floorf(phase);
+        }
+
+        float value = 0.0f;
+        if (wave_type == 0) {
+            value = (phase < 0.5f) ? 1.0f : -1.0f;
+        } else if (wave_type == 1) {
+            value = 1.0f - 4.0f * fabsf(phase - 0.5f);
+        } else {
+            value = ((i * 1103515245u) & 0x4000u) ? 0.8f : -0.8f;
+        }
+
+        samples[i] = (short)(value * (1.0f - progress) * 8500.0f);
     }
-    Wave w = {n, sr, 16, 1, buf};
-    Sound snd = LoadSoundFromWave(w);
-    UnloadWave(w);
-    return snd;
+
+    Wave wave = {sample_count, sample_rate, 16, 1, samples};
+    Sound sound = LoadSoundFromWave(wave);
+    UnloadWave(wave);
+    return sound;
 }
 
-static void outText(const char *t, int x, int y, int sz, Color fg, Color bg) {
-    for (int dy = -2; dy <= 2; dy += 2)
-        for (int dx = -2; dx <= 2; dx += 2)
-            if (dx || dy) DrawText(t, x + dx, y + dy, sz, bg);
-    DrawText(t, x + 3, y + 3, sz, bg);
-    DrawText(t, x, y, sz, fg);
+/* ---------- UI Text & Box Helpers ---------- */
+
+static void drawOutlinedText(const char *text, int x, int y, int size, Color fg, Color outline) {
+    for (int dy = -2; dy <= 2; dy += 2) {
+        for (int dx = -2; dx <= 2; dx += 2) {
+            if (dx != 0 || dy != 0) {
+                DrawText(text, x + dx, y + dy, size, outline);
+            }
+        }
+    }
+    DrawText(text, x + 3, y + 3, size, outline);
+    DrawText(text, x, y, size, fg);
 }
-static void centerText(const char *t, int y, int sz, Color fg, Color bg) {
-    outText(t, (SCREEN_W - MeasureText(t, sz)) / 2, y, sz, fg, bg);
+
+static void drawCenteredText(const char *text, int y, int size, Color fg, Color outline) {
+    int x = (SCREEN_W - MeasureText(text, size)) / 2;
+    drawOutlinedText(text, x, y, size, fg, outline);
 }
-static void drawCursorList(const char **items, int n, int cur, int y0, int gap, Color hi) {
-    for (int i = 0; i < n; i++) {
-        const char *line = TextFormat("%s %s", cur == i ? ">" : " ", items[i]);
-        int x = (SCREEN_W - MeasureText(line, 26)) / 2, y = y0 + i * gap;
-        outText(line, x - 1, y - 1, 26, BLACK, BLACK);
-        outText(line, x + 1, y + 1, 26, BLACK, BLACK);
-        outText(line, x, y, 26, cur == i ? hi : WHITE, BLACK);
+
+static void drawMenuOptions(const char **items, int count, int cursor, int y_start, int gap, Color highlight) {
+    for (int i = 0; i < count; i++) {
+        const char *prefix = (cursor == i) ? ">" : " ";
+        const char *line = TextFormat("%s %s", prefix, items[i]);
+        int x = (SCREEN_W - MeasureText(line, 26)) / 2;
+        int y = y_start + i * gap;
+        Color color = (cursor == i) ? highlight : WHITE;
+
+        drawOutlinedText(line, x - 1, y - 1, 26, BLACK, BLACK);
+        drawOutlinedText(line, x + 1, y + 1, 26, BLACK, BLACK);
+        drawOutlinedText(line, x, y, 26, color, BLACK);
     }
 }
-static void drawEthnicBox(Rectangle r) {
-    DrawRectangleRec(r, (Color){123, 17, 19, 255});
-    DrawRectangleLinesEx(r, 4, (Color){244, 196, 48, 255});
-    for (int x = (int)r.x + 8; x < (int)(r.x + r.width) - 12; x += 16) {
-        DrawRectangle(x, (int)r.y + 4, 8, 6, GOLD); DrawRectangle(x + 2, (int)r.y + 5, 4, 4, GREEN);
-        DrawRectangle(x, (int)(r.y + r.height) - 10, 8, 6, GOLD); DrawRectangle(x + 2, (int)(r.y + r.height) - 9, 4, 4, GREEN);
+
+static void drawSablayBox(Rectangle box) {
+    DrawRectangleRec(box, (Color){123, 17, 19, 255});
+    DrawRectangleLinesEx(box, 4, (Color){244, 196, 48, 255});
+    for (int x = (int)box.x + 8; x < (int)(box.x + box.width) - 12; x += 16) {
+        DrawRectangle(x, (int)box.y + 4, 8, 6, GOLD);
+        DrawRectangle(x + 2, (int)box.y + 5, 4, 4, GREEN);
+        DrawRectangle(x, (int)(box.y + box.height) - 10, 8, 6, GOLD);
+        DrawRectangle(x + 2, (int)(box.y + box.height) - 9, 4, 4, GREEN);
     }
 }
+
+/* ---------- Screen Input Handlers ---------- */
+
+static void updateMenuInput(GameState *game, bool up, bool down, bool confirm) {
+    if (up) {
+        game->menu_cursor = (game->menu_cursor + 3) % 4;
+        game->play_sfx[SFX_MOVE] = true;
+    }
+    if (down) {
+        game->menu_cursor = (game->menu_cursor + 1) % 4;
+        game->play_sfx[SFX_MOVE] = true;
+    }
+    if (!confirm) {
+        return;
+    }
+
+    game->play_sfx[SFX_SELECT] = true;
+    if (game->menu_cursor == 0) {
+        startNewRun(game, 1);
+        game->scene = SCENE_BRIEFING;
+    } else if (game->menu_cursor == 1) {
+        startNewRun(game, game->unlocked_stage);
+        game->scene = SCENE_BRIEFING;
+    } else if (game->menu_cursor == 2) {
+        game->settings_cursor = 0;
+        game->settings_back = SCENE_MENU;
+        game->scene = SCENE_SETTINGS;
+    } else {
+        game->should_exit = true;
+    }
+}
+
+static void updateSettingsInput(GameState *game, bool audio_ok, bool up, bool down) {
+    if (up) {
+        game->settings_cursor = (game->settings_cursor + 2) % 3;
+        game->play_sfx[SFX_MOVE] = true;
+    }
+    if (down) {
+        game->settings_cursor = (game->settings_cursor + 1) % 3;
+        game->play_sfx[SFX_MOVE] = true;
+    }
+
+    int delta = 0;
+    if (IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_D)) delta = 10;
+    if (IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_A)) delta = -10;
+
+    if (delta != 0 && game->settings_cursor == 0) {
+        game->master_volume += delta;
+        if (game->master_volume < 0) game->master_volume = 0;
+        if (game->master_volume > 100) game->master_volume = 100;
+        if (audio_ok) SetMasterVolume((float)game->master_volume / 100.0f);
+        game->play_sfx[SFX_MOVE] = true;
+    } else if (delta != 0 && game->settings_cursor == 1) {
+        game->sfx_volume += delta;
+        if (game->sfx_volume < 0) game->sfx_volume = 0;
+        if (game->sfx_volume > 100) game->sfx_volume = 100;
+        game->play_sfx[SFX_MOVE] = true;
+    }
+
+    bool exit_settings = IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_ENTER) ||
+                         (IsKeyPressed(KEY_SPACE) && game->settings_cursor == 2);
+    if (exit_settings) {
+        saveProfile(game, SAVE_PATH);
+        game->play_sfx[SFX_SELECT] = true;
+        game->scene = game->settings_back;
+    }
+}
+
+static void updateGameInput(GameState *game, bool up, bool down, bool confirm, float dt) {
+    Rectangle gear_btn = {SCREEN_W - 44, 12, 36, 36};
+    bool clicked_gear = IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
+                        CheckCollisionPointRec(GetMousePosition(), gear_btn);
+
+    if (IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_P) || clicked_gear) {
+        game->paused = !game->paused;
+        game->pause_cursor = 0;
+        game->play_sfx[SFX_MOVE] = true;
+        return;
+    }
+
+    if (game->paused) {
+        if (up) {
+            game->pause_cursor = (game->pause_cursor + 3) % 4;
+            game->play_sfx[SFX_MOVE] = true;
+        }
+        if (down) {
+            game->pause_cursor = (game->pause_cursor + 1) % 4;
+            game->play_sfx[SFX_MOVE] = true;
+        }
+        if (!confirm) {
+            return;
+        }
+
+        game->play_sfx[SFX_SELECT] = true;
+        if (game->pause_cursor == 0) {
+            game->paused = false;
+        } else if (game->pause_cursor == 1) {
+            game->settings_cursor = 0;
+            game->settings_back = SCENE_GAME;
+            game->scene = SCENE_SETTINGS;
+        } else if (game->pause_cursor == 2) {
+            game->paused = false;
+            retakeCurrentStage(game);
+        } else {
+            game->paused = false;
+            game->scene = SCENE_MENU;
+        }
+        return;
+    }
+
+    InputState input = {
+        .left  = IsKeyDown(KEY_A) || IsKeyDown(KEY_LEFT),
+        .right = IsKeyDown(KEY_D) || IsKeyDown(KEY_RIGHT),
+        .up    = IsKeyDown(KEY_W) || IsKeyDown(KEY_UP),
+        .down  = IsKeyDown(KEY_S) || IsKeyDown(KEY_DOWN),
+        .jump  = IsKeyPressed(KEY_W) || IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_UP)
+    };
+    updateStageGameplay(game, &input, dt);
+}
+
+/* ---------- Screen Draw Helpers ---------- */
+
+static void drawFullBg(Texture2D bg, Color tint) {
+    Rectangle src = {0, 0, (float)bg.width, (float)bg.height};
+    Rectangle dst = {0, 0, SCREEN_W, SCREEN_H};
+    DrawTexturePro(bg, src, dst, (Vector2){0, 0}, 0.0f, tint);
+}
+
+static void drawMenuScreen(const GameState *game, Texture2D bg) {
+    drawFullBg(bg, WHITE);
+    const char *options[4] = {"NEW GAME", "CONTINUE", "SETTINGS", "EXIT"};
+    drawMenuOptions(options, 4, game->menu_cursor, 352, 40, GOLD);
+
+    DrawRectangle(0, SCREEN_H - 44, SCREEN_W, 44, (Color){16, 16, 22, 220});
+    drawOutlinedText(TextFormat("BEST SCORE: %04d", game->best_score), 22, SCREEN_H - 32, 22, GOLD, BLACK);
+    const char *gwa_text = TextFormat("GWA: %.2f %s", (double)game->best_gwa, laudeTag(game->best_gwa, true));
+    drawOutlinedText(gwa_text, SCREEN_W - MeasureText(gwa_text, 22) - 22, SCREEN_H - 32, 22, (Color){116, 244, 204, 255}, BLACK);
+}
+
+static void drawSettingsScreen(const GameState *game, Texture2D bg) {
+    drawFullBg(bg, (Color){185, 185, 195, 255});
+    DrawRectangle(0, 0, SCREEN_W, SCREEN_H, (Color){12, 14, 22, 145});
+    drawCenteredText("AUDIO SETTINGS", 78, 44, GOLD, MAROON);
+
+    DrawRectangle((SCREEN_W - 560) / 2, 164, 560, 240, (Color){20, 22, 34, 225});
+    const char *rows[3] = {
+        TextFormat("MASTER VOLUME: [ < %3d%% > ]", game->master_volume),
+        TextFormat("SFX VOLUME:    [ < %3d%% > ]", game->sfx_volume),
+        "BACK"
+    };
+    drawMenuOptions(rows, 3, game->settings_cursor, 204, 64, GOLD);
+    drawCenteredText("[LEFT / RIGHT]: ADJUST | [ENTER / ESC]: SAVE & EXIT", SCREEN_H - 34, 18, RAYWHITE, BLACK);
+}
+
+static void drawBriefingScreen(const GameState *game, Texture2D bg) {
+    drawFullBg(bg, (Color){130, 130, 145, 255});
+    drawSablayBox((Rectangle){(SCREEN_W - 680) / 2.0f, 120, 680, 320});
+    DrawRectangle((SCREEN_W - 656) / 2, 138, 656, 284, (Color){24, 24, 34, 245});
+
+    drawCenteredText(TextFormat("COURSE %d OF %d - %s (%s)", game->stage.course_id, TOTAL_STAGES, game->stage.code, game->stage.subtitle), 156, 20, SKYBLUE, BLACK);
+    drawCenteredText(game->stage.title, 196, 26, GOLD, BLACK);
+    drawCenteredText(game->stage.hint, 254, 17, RAYWHITE, BLACK);
+    drawCenteredText(TextFormat("TIME: %.0fs | GRAVITY: %.2fx | GWA: %.2f", (double)game->stage.time_limit, (double)game->stage.gravity_scale, (double)game->isko.gwa), 312, 18, GREEN, BLACK);
+    drawCenteredText("PRESS [ENTER] OR [E] TO BEGIN COURSE", 376, 22, GOLD, BLACK);
+}
+
+static void drawGameScreen(const GameState *game, Texture2D stage_bg[2], Texture2D tile, Texture2D isko[4]) {
+    const Stage *stage = &game->stage;
+    const Player *player = &game->isko;
+
+    Texture2D sbg = stage_bg[(stage->course_id == 2) ? 1 : 0];
+    DrawTexturePro(sbg, (Rectangle){0, 0, (float)sbg.width, (float)sbg.height},
+                   (Rectangle){0, HUD_H, SCREEN_W, SCREEN_H - HUD_H}, (Vector2){0, 0}, 0.0f, WHITE);
+
+    for (int i = 0; i < stage->platform_count; i++) {
+        Rect2D plat = stage->platforms[i];
+        if (plat.y >= 510.0f) {
+            for (int tx = (int)plat.x; tx < (int)(plat.x + plat.w); tx += TILE_SIZE) {
+                for (int ty = (int)plat.y; ty < (int)(plat.y + plat.h); ty += TILE_SIZE) {
+                    DrawTexturePro(tile, (Rectangle){0, 0, 16, 16}, (Rectangle){(float)tx, (float)ty, TILE_SIZE, TILE_SIZE}, (Vector2){0, 0}, 0.0f, WHITE);
+                }
+            }
+        } else {
+            DrawRectangleRec((Rectangle){plat.x, plat.y, plat.w, plat.h}, (Color){138, 92, 54, 255});
+            DrawRectangle((int)plat.x, (int)plat.y, (int)plat.w, 5, (Color){68, 174, 72, 255});
+            DrawRectangleLinesEx((Rectangle){plat.x, plat.y, plat.w, plat.h}, 2, BLACK);
+        }
+    }
+
+    for (int i = 0; i < stage->ladder_count; i++) {
+        Rect2D lad = stage->ladders[i];
+        DrawRectangle((int)lad.x, (int)lad.y, 4, (int)lad.h, GOLD);
+        DrawRectangle((int)(lad.x + lad.w - 4), (int)lad.y, 4, (int)lad.h, GOLD);
+        for (int y = (int)lad.y + 8; y < (int)(lad.y + lad.h); y += 14) {
+            DrawRectangle((int)lad.x + 4, y, (int)lad.w - 8, 4, GOLD);
+        }
+    }
+
+    for (int i = 0; i < stage->plate_count; i++) {
+        const Plate *plate = &stage->plates[i];
+        int press_offset = plate->active ? 3 : 0;
+        Color c = plate->active ? GREEN : RED;
+        DrawRectangle((int)plate->rect.x, (int)plate->rect.y + press_offset, (int)plate->rect.w, (int)plate->rect.h - press_offset, c);
+        drawOutlinedText(plate->label, (int)plate->rect.x, (int)plate->rect.y - 18, 13, WHITE, BLACK);
+    }
+
+    Color exit_color = stage->terminal_online ? GREEN : RED;
+    DrawRectangle((int)stage->exit_terminal.x, (int)stage->exit_terminal.y, 36, 48, (Color){34, 40, 52, 255});
+    DrawRectangleLines((int)stage->exit_terminal.x, (int)stage->exit_terminal.y, 36, 48, exit_color);
+    DrawRectangle((int)stage->exit_terminal.x + 6, (int)stage->exit_terminal.y + 8, 24, 18, exit_color);
+    drawOutlinedText(stage->terminal_online ? "EXIT ON" : "LOCKED", (int)stage->exit_terminal.x - 6, (int)stage->exit_terminal.y - 18, 13, exit_color, BLACK);
+
+    if (stage->has_crate) {
+        DrawRectangle((int)stage->crate.x, (int)stage->crate.y, (int)stage->crate.w, (int)stage->crate.h, (Color){178, 116, 54, 255});
+        DrawRectangleLines((int)stage->crate.x, (int)stage->crate.y, (int)stage->crate.w, (int)stage->crate.h, (Color){92, 52, 18, 255});
+        DrawLine((int)stage->crate.x, (int)stage->crate.y, (int)(stage->crate.x + stage->crate.w), (int)(stage->crate.y + stage->crate.h), (Color){92, 52, 18, 255});
+    }
+
+    for (int i = 0; i < stage->item_count; i++) {
+        if (stage->items[i].collected) continue;
+        int x = (int)stage->items[i].rect.x;
+        int y = (int)(stage->items[i].rect.y + sinf(stage->items[i].phase) * 4.0f);
+        if (stage->items[i].kind == 0) {
+            DrawRectangle(x, y, 20, 24, RAYWHITE);
+            DrawRectangleLines(x, y, 20, 24, BLACK);
+            DrawRectangle(x + 4, y + 5, 10, 3, MAROON);
+        } else {
+            DrawRectangle(x, y + 4, 18, 16, WHITE);
+            DrawRectangle(x + 2, y + 6, 14, 4, BROWN);
+        }
+    }
+
+    for (int i = 0; i < stage->hazard_count; i++) {
+        if (!stage->hazards[i].alive) continue;
+        Rect2D h = stage->hazards[i].rect;
+        if (stage->hazards[i].kind == 1) {
+            DrawCircle((int)(h.x + 13), (int)(h.y + 13), 12, PURPLE);
+        } else {
+            DrawRectangle((int)h.x + 2, (int)h.y + 2, 22, 14, (Color){148, 56, 36, 255});
+            DrawRectangle((int)h.x + 6, (int)h.y + 16, 14, 10, (Color){224, 188, 142, 255});
+        }
+    }
+
+    bool blink_visible = (player->invuln_timer <= 0.0f) || (((int)(player->invuln_timer * 14.0f) % 2) == 0);
+    if (blink_visible) {
+        int pose = 0;
+        if (player->on_ladder) pose = 3;
+        else if (!player->is_grounded) pose = 2;
+        else if (fabsf(player->vx) > 10.0f) pose = player->anim_frame % 2;
+
+        Texture2D tx = isko[pose];
+        float src_w = player->facing_right ? (float)tx.width : -(float)tx.width;
+        DrawTexturePro(tx, (Rectangle){0, 0, src_w, (float)tx.height},
+                       (Rectangle){player->x - 2, player->y, player->w + 4, player->h}, (Vector2){0, 0}, 0.0f, WHITE);
+    }
+
+    if (stage->banner_timer > 0.0f) {
+        DrawRectangle((SCREEN_W - 560) / 2, HUD_H + 8, 560, 28, (Color){12, 14, 22, 200});
+        drawCenteredText(stage->banner, HUD_H + 13, 17, GOLD, BLACK);
+    }
+    drawOutlinedText("WASD/ARROWS: Move | SPACE: Jump | ESC/P: Pause | F9/F10: Demo", 20, SCREEN_H - 20, 12, RAYWHITE, BLACK);
+
+    /* Top 64px checkerboard HUD */
+    for (int y = 0; y < HUD_H; y += 8) {
+        for (int x = 0; x < SCREEN_W; x += 8) {
+            bool even_tile = ((x / 8 + y / 8) % 2) == 0;
+            Color cell_color = even_tile ? (Color){214, 218, 224, 255} : (Color){196, 202, 210, 255};
+            DrawRectangle(x, y, 8, 8, cell_color);
+        }
+    }
+
+    Color gwa_color = GREEN;
+    if (player->gwa > 3.0f) gwa_color = RED;
+    else if (player->gwa > 1.75f) gwa_color = YELLOW;
+
+    drawOutlinedText(stage->code, 16, 10, 22, (Color){44, 184, 255, 255}, BLACK);
+    drawOutlinedText(stage->subtitle, 16, 36, 16, (Color){76, 218, 255, 255}, BLACK);
+    drawOutlinedText(TextFormat("GWA: %.2f", (double)player->gwa), 146, 10, 20, gwa_color, BLACK);
+    drawOutlinedText(TextFormat("SCORE: %05d", game->total_score), 146, 36, 18, GOLD, BLACK);
+    drawOutlinedText(TextFormat("SLIPS: %d/3", player->slips), 290, 12, 16, (player->slips >= 2) ? RED : WHITE, BLACK);
+    drawCenteredText(TextFormat("TIME: %02ds", (int)ceilf(stage->time_remaining)), 18, 28, GOLD, BLACK);
+    drawOutlinedText(TextFormat("PAPERS: %d/%d", player->papers, TOTAL_PAPERS), SCREEN_W - 216, 20, 22, WHITE, BLACK);
+    DrawCircle(SCREEN_W - 28, 30, 12, DARKGRAY);
+    DrawCircle(SCREEN_W - 28, 30, 5, LIGHTGRAY);
+
+    if (game->paused) {
+        DrawRectangle(0, 0, SCREEN_W, SCREEN_H, (Color){10, 10, 16, 175});
+        drawSablayBox((Rectangle){(SCREEN_W - 340) / 2.0f, 160, 340, 240});
+        drawCenteredText("PAUSED", 184, 30, GOLD, BLACK);
+        const char *pause_opts[4] = {"RESUME", "SETTINGS", "RETRY STAGE", "MAIN MENU"};
+        drawMenuOptions(pause_opts, 4, game->pause_cursor, 236, 36, GOLD);
+    }
+}
+
+static void drawGameOverScreen(const GameState *game, Texture2D bg) {
+    drawFullBg(bg, (Color){110, 100, 108, 255});
+    DrawRectangle(0, 0, SCREEN_W, SCREEN_H, (Color){14, 8, 10, 150});
+
+    Rectangle modal = {(SCREEN_W - 560) / 2.0f, 76, 560, 310};
+    DrawRectangleRec(modal, (Color){248, 242, 226, 255});
+    DrawRectangleLinesEx(modal, 6, (Color){118, 16, 22, 255});
+
+    int cx = SCREEN_W / 2;
+    DrawText("UNIVERSITY OF THE PHILIPPINES", cx - MeasureText("UNIVERSITY OF THE PHILIPPINES", 20) / 2, 102, 20, BLACK);
+    DrawText("OFFICE OF THE UNIVERSITY REGISTRAR", cx - MeasureText("OFFICE OF THE UNIVERSITY REGISTRAR", 15) / 2, 128, 15, DARKGRAY);
+    DrawText("NOTICE OF ACADEMIC DISMISSAL", cx - MeasureText("NOTICE OF ACADEMIC DISMISSAL", 24) / 2, 172, 24, MAROON);
+    DrawText("Scholastic Deficiency: GWA 5.00", cx - MeasureText("Scholastic Deficiency: GWA 5.00", 20) / 2, 218, 20, BLACK);
+    DrawText("Your GWA has left the chat.", cx - MeasureText("Your GWA has left the chat.", 16) / 2, 248, 16, DARKGRAY);
+    DrawRectangleLinesEx((Rectangle){(float)cx - 92, 292, 184, 52}, 5, RED);
+    DrawText("DROPPED", cx - MeasureText("DROPPED", 30) / 2, 304, 30, RED);
+
+    DrawRectangle((SCREEN_W - 320) / 2, 412, 320, 106, BLACK);
+    const char *options[2] = {"RETAKE COURSE", "MAIN MENU"};
+    drawMenuOptions(options, 2, game->gameover_cursor, 430, 42, ORANGE);
+}
+
+static void drawVictoryScreen(const GameState *game, Texture2D bg) {
+    drawFullBg(bg, WHITE);
+    Color confetti[4] = {MAROON, GOLD, GREEN, SKYBLUE};
+    for (int i = 0; i < 48; i++) {
+        int x = (i * 73 + (int)(game->global_timer * 45.0f)) % SCREEN_W;
+        int y = (i * 47 + (int)(game->global_timer * (60.0f + (float)(i % 5) * 14.0f))) % SCREEN_H;
+        DrawRectangle(x, y, 8, 8, confetti[i % 4]);
+    }
+    DrawRectangle(0, 0, SCREEN_W, 18, MAROON);
+    DrawRectangle(0, 18, SCREEN_W, 6, GOLD);
+
+    DrawRectangle(90, 96, SCREEN_W - 180, 356, (Color){16, 18, 28, 200});
+    drawCenteredText("WEEK 3 CLEARED!", 126, 44, GOLD, MAROON);
+    drawCenteredText(TextFormat("FINAL GWA: %.2f %s", (double)game->isko.gwa, laudeTag(game->isko.gwa, false)), 196, 28, SKYBLUE, BLACK);
+    drawCenteredText(laudeQuote(game->isko.gwa), 258, 20, RAYWHITE, BLACK);
+    drawCenteredText(TextFormat("Final Score: %06d", game->total_score), 324, 30, GOLD, BLACK);
+    drawCenteredText("PRESS [ENTER] TO RETURN TO MAIN MENU", SCREEN_H - 36, 22, WHITE, BLACK);
+}
+
+/* ---------- Main Entry Point ---------- */
 
 int main(int argc, char **argv) {
     bool smoke = (argc > 1 && strcmp(argv[1], "--smoke-test") == 0);
-    GameState g = {0};
-    loadProfile(&g, SAVE_PATH);
-    g.settings_back = SCENE_MENU;
+    GameState game = {0};
+    loadProfile(&game, SAVE_PATH);
+    game.settings_back = SCENE_MENU;
 
     if (smoke) SetConfigFlags(FLAG_WINDOW_HIDDEN);
     InitWindow(SCREEN_W, SCREEN_H, "SABLAY - Week 3 Milestone (NSTP 1 & Science 10)");
-    SetExitKey(KEY_NULL); SetTargetFPS(60);
+    if (FileExists("assets/icon.png")) {
+        Image icon = LoadImage("assets/icon.png");
+        ImageFormat(&icon, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
+        SetWindowIcon(icon);
+        UnloadImage(icon);
+    }
+    SetExitKey(KEY_NULL);
+    SetTargetFPS(60);
+
     InitAudioDevice();
     bool audio_ok = IsAudioDeviceReady();
-    if (audio_ok) SetMasterVolume((float)g.master_volume / 100.0f);
+    if (audio_ok) SetMasterVolume((float)game.master_volume / 100.0f);
 
-    Texture2D bg = loadBg("assets/campus_bg.jpg", (Color){42, 68, 96, 255}), isko[4];
+    Texture2D bg = loadBg("assets/campus_bg.jpg", (Color){42, 68, 96, 255});
     Texture2D stage_bg[2] = {
         loadBg("assets/stage1_bg.jpg", (Color){126, 188, 232, 255}),
         loadBg("assets/stage2_bg.jpg", (Color){22, 28, 66, 255})
     };
-    Image gimg = GenImageColor(16, 16, (Color){126, 78, 44, 255});
-    ImageDrawRectangle(&gimg, 0, 0, 16, 5, (Color){62, 164, 58, 255});
-    ImageDrawRectangle(&gimg, 0, 0, 16, 2, (Color){106, 206, 82, 255});
-    Texture2D tile = makeTex(gimg);
-    for (int i = 0; i < 4; i++) isko[i] = buildIskoSprite(i);
+    Texture2D tile = buildGrassTile();
+    Texture2D isko[4];
+    for (int i = 0; i < 4; i++) {
+        isko[i] = buildIskoSprite(i);
+    }
 
-    Sound sfx[10];
+    Sound sfx[SFX_COUNT] = {0};
     if (audio_ok) {
-        static const float f0[10] = {440,520,260,660,480,360,340,220,523,300};
-        static const float f1[10] = {520,780,620,1180,960,720,140,80,1046,95};
-        static const float du[10] = {0.06f,0.12f,0.14f,0.18f,0.22f,0.15f,0.12f,0.24f,0.36f,0.42f};
-        static const int   wv[10] = {0,0,0,1,1,0,2,2,1,0};
-        for (int i = 0; i < 10; i++) sfx[i] = makeTone(f0[i], f1[i], du[i], wv[i]);
+        static const float f0[SFX_COUNT]  = {440, 520, 260, 660, 480, 360, 340, 220, 523, 300};
+        static const float f1[SFX_COUNT]  = {520, 780, 620, 1180, 960, 720, 140, 80, 1046, 95};
+        static const float dur[SFX_COUNT] = {0.06f, 0.12f, 0.14f, 0.18f, 0.22f, 0.15f, 0.12f, 0.24f, 0.36f, 0.42f};
+        static const int wave[SFX_COUNT]  = {0, 0, 0, 1, 1, 0, 2, 2, 1, 0};
+        for (int i = 0; i < SFX_COUNT; i++) {
+            sfx[i] = makeTone(f0[i], f1[i], dur[i], wave[i]);
+        }
     }
 
     int frames = 0;
-    while (!WindowShouldClose() && !g.should_exit) {
+    while (!WindowShouldClose() && !game.should_exit) {
         float dt = GetFrameTime();
-        if (dt <= 0) dt = 1.0f / 60.0f;
-        g.global_timer += dt;
+        if (dt <= 0.0f) dt = 1.0f / 60.0f;
+        game.global_timer += dt;
 
-        if (IsKeyPressed(KEY_F9)) { g.isko.gwa = 5; g.isko.slips = 3; g.paused = false; g.over_cur = 0; g.scene = SCENE_GAMEOVER; g.sfx |= SFX_GAMEOVER; }
+        /* Demo shortcuts */
+        if (IsKeyPressed(KEY_F9)) {
+            game.isko.gwa = 5.0f;
+            game.isko.slips = 3;
+            game.paused = false;
+            game.gameover_cursor = 0;
+            game.scene = SCENE_GAMEOVER;
+            game.play_sfx[SFX_GAMEOVER] = true;
+        }
         if (IsKeyPressed(KEY_F10)) {
-            if (g.isko.gwa >= 4.99f) g.isko.gwa = 1.85f;
-            if (g.total_score <= 0) g.total_score = 3240;
-            if (g.total_score > g.best_score) g.best_score = g.total_score;
-            if (g.isko.gwa < g.best_gwa) g.best_gwa = g.isko.gwa;
-            saveProfile(&g, SAVE_PATH); g.paused = false; g.scene = SCENE_VICTORY; g.sfx |= SFX_CLEAR;
+            if (game.isko.gwa >= 4.99f) game.isko.gwa = 1.85f;
+            if (game.total_score <= 0) game.total_score = 3240;
+            if (game.total_score > game.best_score) game.best_score = game.total_score;
+            if (game.isko.gwa < game.best_gwa) game.best_gwa = game.isko.gwa;
+            saveProfile(&game, SAVE_PATH);
+            game.paused = false;
+            game.scene = SCENE_VICTORY;
+            game.play_sfx[SFX_CLEAR] = true;
         }
 
-        /* Scene Update */
-        bool up = IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W), dn = IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S);
-        bool ok = IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_E);
-        if (g.scene == SCENE_MENU) {
-            if (up) { g.menu_cur = (g.menu_cur + 3) % 4; g.sfx |= SFX_MOVE; }
-            if (dn) { g.menu_cur = (g.menu_cur + 1) % 4; g.sfx |= SFX_MOVE; }
-            if (ok) {
-                g.sfx |= SFX_SELECT;
-                if (g.menu_cur < 2) { startNewRun(&g, g.menu_cur == 0 ? 1 : g.unlocked_stage); g.scene = SCENE_BRIEFING; }
-                else if (g.menu_cur == 2) { g.set_cur = 0; g.settings_back = SCENE_MENU; g.scene = SCENE_SETTINGS; }
-                else g.should_exit = true;
+        bool up = IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W);
+        bool down = IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S);
+        bool confirm = IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_E);
+
+        if (game.scene == SCENE_MENU) {
+            updateMenuInput(&game, up, down, confirm);
+        } else if (game.scene == SCENE_SETTINGS) {
+            updateSettingsInput(&game, audio_ok, up, down);
+        } else if (game.scene == SCENE_BRIEFING) {
+            if (confirm) {
+                game.play_sfx[SFX_SELECT] = true;
+                game.scene = SCENE_GAME;
+            } else if (IsKeyPressed(KEY_ESCAPE)) {
+                game.scene = SCENE_MENU;
             }
-        } else if (g.scene == SCENE_SETTINGS) {
-            if (up) { g.set_cur = (g.set_cur + 2) % 3; g.sfx |= SFX_MOVE; }
-            if (dn) { g.set_cur = (g.set_cur + 1) % 3; g.sfx |= SFX_MOVE; }
-            int d = (IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_D)) ? 10 : ((IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_A)) ? -10 : 0);
-            if (d && g.set_cur == 0) {
-                g.master_volume = g.master_volume + d < 0 ? 0 : (g.master_volume + d > 100 ? 100 : g.master_volume + d);
-                if (audio_ok) SetMasterVolume((float)g.master_volume / 100.0f);
-                g.sfx |= SFX_MOVE;
-            } else if (d && g.set_cur == 1) {
-                g.sfx_volume = g.sfx_volume + d < 0 ? 0 : (g.sfx_volume + d > 100 ? 100 : g.sfx_volume + d);
-                g.sfx |= SFX_MOVE;
+        } else if (game.scene == SCENE_GAME) {
+            updateGameInput(&game, up, down, confirm, dt);
+        } else if (game.scene == SCENE_GAMEOVER) {
+            if (up || down) {
+                game.gameover_cursor = 1 - game.gameover_cursor;
+                game.play_sfx[SFX_MOVE] = true;
             }
-            if (IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_ENTER) || (IsKeyPressed(KEY_SPACE) && g.set_cur == 2)) {
-                saveProfile(&g, SAVE_PATH); g.sfx |= SFX_SELECT; g.scene = g.settings_back;
-            }
-        } else if (g.scene == SCENE_BRIEFING) {
-            if (ok) { g.sfx |= SFX_SELECT; g.scene = SCENE_GAME; }
-            else if (IsKeyPressed(KEY_ESCAPE)) g.scene = SCENE_MENU;
-        } else if (g.scene == SCENE_GAME) {
-            bool gear = IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && CheckCollisionPointRec(GetMousePosition(), (Rectangle){SCREEN_W - 44, 12, 36, 36});
-            if (IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_P) || gear) { g.paused = !g.paused; g.pause_cur = 0; g.sfx |= SFX_MOVE; }
-            else if (g.paused) {
-                if (up) { g.pause_cur = (g.pause_cur + 3) % 4; g.sfx |= SFX_MOVE; }
-                if (dn) { g.pause_cur = (g.pause_cur + 1) % 4; g.sfx |= SFX_MOVE; }
-                if (ok) {
-                    g.sfx |= SFX_SELECT;
-                    if (g.pause_cur == 0) g.paused = false;
-                    else if (g.pause_cur == 1) { g.set_cur = 0; g.settings_back = SCENE_GAME; g.scene = SCENE_SETTINGS; }
-                    else if (g.pause_cur == 2) { g.paused = false; retakeCurrentStage(&g); }
-                    else { g.paused = false; g.scene = SCENE_MENU; }
+            if (confirm) {
+                game.play_sfx[SFX_SELECT] = true;
+                if (game.gameover_cursor == 0) {
+                    retakeCurrentStage(&game);
+                    game.scene = SCENE_GAME;
+                } else {
+                    game.scene = SCENE_MENU;
                 }
-            } else {
-                InputState in = {IsKeyDown(KEY_A)||IsKeyDown(KEY_LEFT), IsKeyDown(KEY_D)||IsKeyDown(KEY_RIGHT),
-                                 IsKeyDown(KEY_W)||IsKeyDown(KEY_UP), IsKeyDown(KEY_S)||IsKeyDown(KEY_DOWN),
-                                 IsKeyPressed(KEY_W)||IsKeyPressed(KEY_SPACE)||IsKeyPressed(KEY_UP)};
-                updateStageGameplay(&g, &in, dt);
             }
-        } else if (g.scene == SCENE_GAMEOVER) {
-            if (up || dn) { g.over_cur = 1 - g.over_cur; g.sfx |= SFX_MOVE; }
-            if (ok) {
-                g.sfx |= SFX_SELECT;
-                if (g.over_cur == 0) { retakeCurrentStage(&g); g.scene = SCENE_GAME; }
-                else g.scene = SCENE_MENU;
-            }
-        } else if (ok) { g.sfx |= SFX_SELECT; g.scene = SCENE_MENU; }
-
-        if (audio_ok && g.sfx) {
-            for (int i = 0; i < 10; i++)
-                if ((g.sfx & (1u << i)) && IsSoundValid(sfx[i])) { SetSoundVolume(sfx[i], (float)g.sfx_volume / 100.0f); PlaySound(sfx[i]); }
+        } else if (confirm) {
+            game.play_sfx[SFX_SELECT] = true;
+            game.scene = SCENE_MENU;
         }
-        g.sfx = 0;
 
-        /* Draw Active Screen */
+        for (int i = 0; i < SFX_COUNT; i++) {
+            if (audio_ok && game.play_sfx[i] && IsSoundValid(sfx[i])) {
+                SetSoundVolume(sfx[i], (float)game.sfx_volume / 100.0f);
+                PlaySound(sfx[i]);
+            }
+            game.play_sfx[i] = false;
+        }
+
         BeginDrawing();
         ClearBackground(BLACK);
-        Rectangle bg_src = {0, 0, (float)bg.width, (float)bg.height}, bg_dst = {0, 0, SCREEN_W, SCREEN_H};
-
-        if (g.scene == SCENE_MENU) {
-            DrawTexturePro(bg, bg_src, bg_dst, (Vector2){0, 0}, 0, WHITE);
-            const char *m[4] = {"NEW GAME", "CONTINUE", "SETTINGS", "EXIT"};
-            drawCursorList(m, 4, g.menu_cur, 352, 40, GOLD);
-            DrawRectangle(0, SCREEN_H - 44, SCREEN_W, 44, (Color){16, 16, 22, 220});
-            outText(TextFormat("BEST SCORE: %04d", g.best_score), 22, SCREEN_H - 32, 22, GOLD, BLACK);
-            const char *gt = TextFormat("GWA: %.2f %s", (double)g.best_gwa, laudeTag(g.best_gwa, true));
-            outText(gt, SCREEN_W - MeasureText(gt, 22) - 22, SCREEN_H - 32, 22, (Color){116, 244, 204, 255}, BLACK);
-        } else if (g.scene == SCENE_SETTINGS) {
-            DrawTexturePro(bg, bg_src, bg_dst, (Vector2){0, 0}, 0, (Color){185, 185, 195, 255});
-            DrawRectangle(0, 0, SCREEN_W, SCREEN_H, (Color){12, 14, 22, 145});
-            centerText("AUDIO SETTINGS", 78, 44, GOLD, MAROON);
-            DrawRectangle((SCREEN_W - 560) / 2, 164, 560, 240, (Color){20, 22, 34, 225});
-            const char *r[3] = {TextFormat("MASTER VOLUME: [ < %3d%% > ]", g.master_volume),
-                                TextFormat("SFX VOLUME:    [ < %3d%% > ]", g.sfx_volume), "BACK"};
-            drawCursorList(r, 3, g.set_cur, 204, 64, GOLD);
-            centerText("[LEFT / RIGHT]: ADJUST | [ENTER / ESC]: SAVE & EXIT", SCREEN_H - 34, 18, RAYWHITE, BLACK);
-        } else if (g.scene == SCENE_BRIEFING) {
-            DrawTexturePro(bg, bg_src, bg_dst, (Vector2){0, 0}, 0, (Color){130, 130, 145, 255});
-            drawEthnicBox((Rectangle){(SCREEN_W - 680) / 2.0f, 120, 680, 320});
-            DrawRectangle((SCREEN_W - 656) / 2, 138, 656, 284, (Color){24, 24, 34, 245});
-            centerText(TextFormat("COURSE %d OF %d - %s (%s)", g.stage.course_id, TOTAL_STAGES, g.stage.code, g.stage.subtitle), 156, 20, SKYBLUE, BLACK);
-            centerText(g.stage.title, 196, 26, GOLD, BLACK);
-            centerText(g.stage.hint, 254, 17, RAYWHITE, BLACK);
-            centerText(TextFormat("TIME: %.0fs | GRAVITY: %.2fx | GWA: %.2f", (double)g.stage.time_limit, (double)g.stage.gravity_scale, (double)g.isko.gwa), 312, 18, GREEN, BLACK);
-            centerText("PRESS [ENTER] OR [E] TO BEGIN COURSE", 376, 22, GOLD, BLACK);
-        } else if (g.scene == SCENE_GAME) {
-            const Stage *s = &g.stage; const Player *p = &g.isko;
-            Texture2D sbg = stage_bg[(s->course_id == 2) ? 1 : 0];
-            DrawTexturePro(sbg, (Rectangle){0, 0, (float)sbg.width, (float)sbg.height},
-                           (Rectangle){0, HUD_H, SCREEN_W, SCREEN_H - HUD_H}, (Vector2){0, 0}, 0, WHITE);
-            for (int i = 0; i < s->platform_count; i++) {
-                Rect2D br = s->platforms[i];
-                if (br.y >= 510) {
-                    for (int tx = (int)br.x; tx < (int)(br.x + br.w); tx += TILE_SIZE)
-                        for (int ty = (int)br.y; ty < (int)(br.y + br.h); ty += TILE_SIZE)
-                            DrawTexturePro(tile, (Rectangle){0,0,16,16}, (Rectangle){(float)tx,(float)ty,TILE_SIZE,TILE_SIZE}, (Vector2){0,0}, 0, WHITE);
-                } else {
-                    DrawRectangleRec((Rectangle){br.x, br.y, br.w, br.h}, (Color){138, 92, 54, 255});
-                    DrawRectangle((int)br.x, (int)br.y, (int)br.w, 5, (Color){68, 174, 72, 255});
-                    DrawRectangleLinesEx((Rectangle){br.x, br.y, br.w, br.h}, 2, BLACK);
-                }
-            }
-            for (int i = 0; i < s->ladder_count; i++) {
-                Rect2D l = s->ladders[i];
-                DrawRectangle((int)l.x, (int)l.y, 4, (int)l.h, GOLD); DrawRectangle((int)(l.x + l.w - 4), (int)l.y, 4, (int)l.h, GOLD);
-                for (int y = (int)l.y + 8; y < (int)(l.y + l.h); y += 14) DrawRectangle((int)l.x + 4, y, (int)l.w - 8, 4, GOLD);
-            }
-            for (int i = 0; i < s->plate_count; i++) {
-                const Plate *pl = &s->plates[i];
-                DrawRectangle((int)pl->rect.x, (int)pl->rect.y + (pl->active ? 3 : 0), (int)pl->rect.w, (int)pl->rect.h - (pl->active ? 3 : 0), pl->active ? GREEN : RED);
-                outText(pl->label, (int)pl->rect.x, (int)pl->rect.y - 18, 13, WHITE, BLACK);
-            }
-            Color ec = s->terminal_online ? GREEN : RED;
-            DrawRectangle((int)s->exit_terminal.x, (int)s->exit_terminal.y, 36, 48, (Color){34, 40, 52, 255});
-            DrawRectangleLines((int)s->exit_terminal.x, (int)s->exit_terminal.y, 36, 48, ec);
-            DrawRectangle((int)s->exit_terminal.x + 6, (int)s->exit_terminal.y + 8, 24, 18, ec);
-            outText(s->terminal_online ? "EXIT ON" : "LOCKED", (int)s->exit_terminal.x - 6, (int)s->exit_terminal.y - 18, 13, ec, BLACK);
-            if (s->has_crate) {
-                DrawRectangle((int)s->crate.x, (int)s->crate.y, (int)s->crate.w, (int)s->crate.h, (Color){178, 116, 54, 255});
-                DrawRectangleLines((int)s->crate.x, (int)s->crate.y, (int)s->crate.w, (int)s->crate.h, (Color){92, 52, 18, 255});
-                DrawLine((int)s->crate.x, (int)s->crate.y, (int)(s->crate.x + s->crate.w), (int)(s->crate.y + s->crate.h), (Color){92, 52, 18, 255});
-            }
-            for (int i = 0; i < s->item_count; i++) {
-                if (s->items[i].collected) continue;
-                int x = (int)s->items[i].rect.x, y = (int)(s->items[i].rect.y + sinf(s->items[i].phase) * 4);
-                if (s->items[i].kind == 0) { DrawRectangle(x, y, 20, 24, RAYWHITE); DrawRectangleLines(x, y, 20, 24, BLACK); DrawRectangle(x + 4, y + 5, 10, 3, MAROON); }
-                else { DrawRectangle(x, y + 4, 18, 16, WHITE); DrawRectangle(x + 2, y + 6, 14, 4, BROWN); }
-            }
-            for (int i = 0; i < s->hazard_count; i++) {
-                if (!s->hazards[i].alive) continue;
-                Rect2D h = s->hazards[i].rect;
-                if (s->hazards[i].kind == 1) DrawCircle((int)(h.x + 13), (int)(h.y + 13), 12, PURPLE);
-                else { DrawRectangle((int)h.x + 2, (int)h.y + 2, 22, 14, (Color){148,56,36,255}); DrawRectangle((int)h.x + 6, (int)h.y + 16, 14, 10, (Color){224,188,142,255}); }
-            }
-            if (p->invuln_timer <= 0 || ((int)(p->invuln_timer * 14) % 2 == 0)) {
-                Texture2D tx = isko[p->on_ladder ? 3 : (!p->is_grounded ? 2 : (fabsf(p->vx) > 10 ? p->anim_frame % 2 : 0))];
-                DrawTexturePro(tx, (Rectangle){0, 0, (p->facing_right ? 1.0f : -1.0f) * tx.width, (float)tx.height}, (Rectangle){p->x - 2, p->y, p->w + 4, p->h}, (Vector2){0, 0}, 0, WHITE);
-            }
-            if (s->banner_timer > 0) { DrawRectangle((SCREEN_W - 560) / 2, HUD_H + 8, 560, 28, (Color){12,14,22,200}); centerText(s->banner, HUD_H + 13, 17, GOLD, BLACK); }
-            outText("WASD/ARROWS: Move | SPACE: Jump | ESC/P: Pause | F9/F10: Demo", 20, SCREEN_H - 20, 12, RAYWHITE, BLACK);
-
-            for (int y = 0; y < HUD_H; y += 8) for (int x = 0; x < SCREEN_W; x += 8)
-                DrawRectangle(x, y, 8, 8, ((x / 8 + y / 8) % 2 == 0) ? (Color){214,218,224,255} : (Color){196,202,210,255});
-            outText(s->code, 16, 10, 22, (Color){44,184,255,255}, BLACK); outText(s->subtitle, 16, 36, 16, (Color){76,218,255,255}, BLACK);
-            outText(TextFormat("GWA: %.2f", (double)p->gwa), 146, 10, 20, p->gwa > 3 ? RED : (p->gwa > 1.75f ? YELLOW : GREEN), BLACK);
-            outText(TextFormat("SCORE: %05d", g.total_score), 146, 36, 18, GOLD, BLACK);
-            outText(TextFormat("SLIPS: %d/3", p->slips), 290, 12, 16, p->slips >= 2 ? RED : WHITE, BLACK);
-            centerText(TextFormat("TIME: %02ds", (int)ceilf(s->time_remaining)), 18, 28, GOLD, BLACK);
-            outText(TextFormat("PAPERS: %d/%d", p->papers, TOTAL_PAPERS), SCREEN_W - 216, 20, 22, WHITE, BLACK);
-            DrawCircle(SCREEN_W - 28, 30, 12, DARKGRAY); DrawCircle(SCREEN_W - 28, 30, 5, LIGHTGRAY);
-            if (g.paused) {
-                DrawRectangle(0, 0, SCREEN_W, SCREEN_H, (Color){10, 10, 16, 175});
-                drawEthnicBox((Rectangle){(SCREEN_W - 340) / 2.0f, 160, 340, 240});
-                centerText("PAUSED", 184, 30, GOLD, BLACK);
-                const char *po[4] = {"RESUME", "SETTINGS", "RETRY STAGE", "MAIN MENU"};
-                drawCursorList(po, 4, g.pause_cur, 236, 36, GOLD);
-            }
-        } else if (g.scene == SCENE_GAMEOVER) {
-            DrawTexturePro(bg, bg_src, bg_dst, (Vector2){0, 0}, 0, (Color){110, 100, 108, 255});
-            DrawRectangle(0, 0, SCREEN_W, SCREEN_H, (Color){14, 8, 10, 150});
-            Rectangle r = {(SCREEN_W - 560) / 2.0f, 76, 560, 310};
-            DrawRectangleRec(r, (Color){248, 242, 226, 255}); DrawRectangleLinesEx(r, 6, (Color){118, 16, 22, 255});
-            int cx = SCREEN_W / 2;
-            DrawText("UNIVERSITY OF THE PHILIPPINES", cx - MeasureText("UNIVERSITY OF THE PHILIPPINES", 20) / 2, 102, 20, BLACK);
-            DrawText("OFFICE OF THE UNIVERSITY REGISTRAR", cx - MeasureText("OFFICE OF THE UNIVERSITY REGISTRAR", 15) / 2, 128, 15, DARKGRAY);
-            DrawText("NOTICE OF ACADEMIC DISMISSAL", cx - MeasureText("NOTICE OF ACADEMIC DISMISSAL", 24) / 2, 172, 24, MAROON);
-            DrawText("Scholastic Deficiency: GWA 5.00", cx - MeasureText("Scholastic Deficiency: GWA 5.00", 20) / 2, 218, 20, BLACK);
-            DrawText("Your GWA has left the chat.", cx - MeasureText("Your GWA has left the chat.", 16) / 2, 248, 16, DARKGRAY);
-            DrawRectangleLinesEx((Rectangle){(float)cx - 92, 292, 184, 52}, 5, RED);
-            DrawText("DROPPED", cx - MeasureText("DROPPED", 30) / 2, 304, 30, RED);
-            DrawRectangle((SCREEN_W - 320) / 2, 412, 320, 106, BLACK);
-            const char *go[2] = {"RETAKE COURSE", "MAIN MENU"};
-            drawCursorList(go, 2, g.over_cur, 430, 42, ORANGE);
-        } else {
-            DrawTexturePro(bg, bg_src, bg_dst, (Vector2){0, 0}, 0, WHITE);
-            Color cc[4] = {MAROON, GOLD, GREEN, SKYBLUE};
-            for (int i = 0; i < 48; i++) DrawRectangle((i * 73 + (int)(g.global_timer * 45)) % SCREEN_W, (i * 47 + (int)(g.global_timer * (60 + (i % 5) * 14))) % SCREEN_H, 8, 8, cc[i % 4]);
-            DrawRectangle(0, 0, SCREEN_W, 18, MAROON); DrawRectangle(0, 18, SCREEN_W, 6, GOLD);
-            DrawRectangle(90, 96, SCREEN_W - 180, 356, (Color){16, 18, 28, 200});
-            centerText("WEEK 3 CLEARED!", 126, 44, GOLD, MAROON);
-            centerText(TextFormat("FINAL GWA: %.2f %s", (double)g.isko.gwa, laudeTag(g.isko.gwa, false)), 196, 28, SKYBLUE, BLACK);
-            centerText(laudeQuote(g.isko.gwa), 258, 20, RAYWHITE, BLACK);
-            centerText(TextFormat("Final Score: %06d", g.total_score), 324, 30, GOLD, BLACK);
-            centerText("PRESS [ENTER] TO RETURN TO MAIN MENU", SCREEN_H - 36, 22, WHITE, BLACK);
-        }
+        if (game.scene == SCENE_MENU) drawMenuScreen(&game, bg);
+        else if (game.scene == SCENE_SETTINGS) drawSettingsScreen(&game, bg);
+        else if (game.scene == SCENE_BRIEFING) drawBriefingScreen(&game, bg);
+        else if (game.scene == SCENE_GAME) drawGameScreen(&game, stage_bg, tile, isko);
+        else if (game.scene == SCENE_GAMEOVER) drawGameOverScreen(&game, bg);
+        else drawVictoryScreen(&game, bg);
         EndDrawing();
-        if (smoke && ++frames >= 5) g.should_exit = true;
+
+        if (smoke && ++frames >= 5) {
+            game.should_exit = true;
+        }
     }
 
-    UnloadTexture(bg); UnloadTexture(stage_bg[0]); UnloadTexture(stage_bg[1]); UnloadTexture(tile);
-    for (int i = 0; i < 4; i++) UnloadTexture(isko[i]);
-    if (audio_ok) { for (int i = 0; i < 10; i++) UnloadSound(sfx[i]); CloseAudioDevice(); }
+    UnloadTexture(bg);
+    UnloadTexture(stage_bg[0]);
+    UnloadTexture(stage_bg[1]);
+    UnloadTexture(tile);
+    for (int i = 0; i < 4; i++) {
+        UnloadTexture(isko[i]);
+    }
+    if (audio_ok) {
+        for (int i = 0; i < SFX_COUNT; i++) {
+            UnloadSound(sfx[i]);
+        }
+        CloseAudioDevice();
+    }
     CloseWindow();
     return 0;
 }

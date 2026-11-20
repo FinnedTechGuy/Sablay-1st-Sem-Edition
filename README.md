@@ -25,7 +25,7 @@ Hey! This is our Week 3 progress build for **SABLAY**, a retro UP Tacloban campu
 ## Devlog: Bugs & Fixes Along the Way
 
 - **Removing the huge hardcoded background code**: Originally `src/main.c` painted the entire Oblation campus pixel-by-pixel in `buildCampusBg()` plus drew stage gradients/stars manually. We replaced that with a small `loadBg()` helper that loads `.jpg` files from `assets/` and falls back to a `1x1` solid color texture if a stage background isn't added yet.
-- **Main Menu readability without a dark box**: After switching to `assets/campus_bg.jpg`, the bright speckled pedestal behind `NEW GAME / CONTINUE / SETTINGS / EXIT` made thin text hard to read, while a translucent black rectangle looked too boxy. Switching `outText()` to an 8-direction outline + drop shadow and giving `drawCursorList()` a double black halo kept the text crisp with zero box behind it.
+- **Main Menu readability without a dark box**: After switching to `assets/campus_bg.jpg`, the bright speckled pedestal behind `NEW GAME / CONTINUE / SETTINGS / EXIT` made thin text hard to read, while a translucent black rectangle looked too boxy. Switching `drawOutlinedText()` to an 8-direction outline + drop shadow and giving `drawMenuOptions()` a double black halo kept the text crisp with zero box behind it.
 - **`ESC` quitting the whole game**: Raylib closes the window on `ESC` by default, so we added `SetExitKey(KEY_NULL)` in `src/main.c` and handled `ESC` ourselves for Pause and Settings.
 - **Corner snags & one-way platforms**: Checking X and Y collisions together made Isko catch on platform corners. Splitting collision into X-first then Y-first—and only landing on thin ledges (`h < 24px`) while falling (`vy >= 0` with previous feet above the ledge)—fixed jumping up through platforms.
 - **Instant 3-slip wipeouts**: Touching a hazard every frame drained all 3 slips immediately, so `applyPenalty()` now grants `1.25s` of invulnerability frames (`invuln_timer`).
@@ -50,12 +50,15 @@ Hey! This is our Week 3 progress build for **SABLAY**, a retro UP Tacloban campu
 Sablay-1st-Sem-Edition/
 ├── assets/
 │   ├── campus_bg.jpg        # Main Menu + Settings/Briefing/Endings backdrop (1024x576)
+│   ├── icon.png             # Transparent 256x256 window/taskbar icon (cropped PNG)
+│   ├── icon.ico             # Windows Explorer .exe icon wrapper
+│   ├── app.rc               # Windows resource script embedding icon.ico
 │   └── README.txt           # Notes for optional stage1_bg.jpg & stage2_bg.jpg
 ├── include/game.h           # Shared structs, constants, SceneState enum, prototypes
 ├── src/core.c               # Pure C99 game logic: save/load, GWA engine, physics, puzzles
 ├── src/main.c               # Raylib window, JPEG/sprite loading, 8-bit SFX, UI screens
-├── .gitignore               # Ignores compiled *.exe / *.o binaries & local save files
-└── Makefile                 # Strict C99 build & --smoke-test script
+├── .gitignore               # Ignores compiled *.exe / *.o / *.res binaries & local saves
+└── Makefile                 # Strict C99 build (with windres icon) & --smoke-test script
 ```
 
 *(Optional `assets/stage1_bg.jpg` and `assets/stage2_bg.jpg` at `960x512` can also be dropped into `assets/`—if missing, the game automatically uses a solid color fallback so it never crashes.)*
@@ -82,21 +85,21 @@ make test
 Everything that went into building this Week 3 milestone, mapped to the actual parts of the codebase:
 
 - **Main Window, Game Loop, Input & File Checks (`src/main.c`)**:
-  - [raylib Cheatsheet (`rcore`)](https://www.raylib.com/cheatsheet/cheatsheet.html) and [raylib Examples (`core_basic_window.c`)](https://www.raylib.com/examples.html) — `InitWindow`, `SetTargetFPS(60)`, `SetExitKey(KEY_NULL)`, `SetConfigFlags(FLAG_WINDOW_HIDDEN)` (for `--smoke-test`), `GetFrameTime`, `IsKeyPressed`/`IsKeyDown`, `IsMouseButtonPressed`, `GetMousePosition`, and `FileExists`.
-- **JPEG Backgrounds, Fallback Textures & Pixel Sprites (`loadBg`, `buildIskoSprite`, `makeTex`)**:
+  - [raylib Cheatsheet (`rcore`)](https://www.raylib.com/cheatsheet/cheatsheet.html) and [raylib Examples (`core_basic_window.c`)](https://www.raylib.com/examples.html) — `InitWindow`, `SetWindowIcon`, `SetTargetFPS(60)`, `SetExitKey(KEY_NULL)`, `SetConfigFlags(FLAG_WINDOW_HIDDEN)` (for `--smoke-test`), `GetFrameTime`, `IsKeyPressed`/`IsKeyDown`, `IsMouseButtonPressed`, `GetMousePosition`, and `FileExists`.
+- **JPEG Backgrounds, Fallback Textures & Pixel Sprites (`loadBg`, `buildGrassTile`, `buildIskoSprite`, `makePixelTex`)**:
   - [raylib Cheatsheet (`rtextures`)](https://www.raylib.com/cheatsheet/cheatsheet.html) and [raylib Examples (`textures_image_loading.c`, `textures_image_drawing.c`)](https://www.raylib.com/examples.html) — `LoadTexture`, `IsTextureValid`, `SetTextureFilter` (`TEXTURE_FILTER_BILINEAR` for `assets/*.jpg`, `TEXTURE_FILTER_POINT` for pixel-art sprites/tiles), `DrawTexturePro`, `UnloadTexture`, plus CPU-side `GenImageColor`, `ImageDrawRectangle`, `ImageDrawPixel`, `LoadTextureFromImage`, and `UnloadImage`.
   - Custom pixel-art Oblation + SABLAY title artwork saved at `assets/campus_bg.jpg` (`1024x576`).
-- **2D Shapes, Outlined Text & UI Screens (`outText`, `drawCursorList`, `drawEthnicBox`, HUD & Modals)**:
+- **2D Shapes, Outlined Text & UI Screens (`drawOutlinedText`, `drawMenuOptions`, `drawSablayBox`, HUD & Modals)**:
   - [raylib Cheatsheet (`rshapes` & `rtext`)](https://www.raylib.com/cheatsheet/cheatsheet.html) — `DrawRectangle`, `DrawRectangleRec`, `DrawRectangleLines`, `DrawRectangleLinesEx`, `DrawLine`, `DrawCircle`, `CheckCollisionPointRec`, `DrawText`, `MeasureText`, and `TextFormat`.
-  - Classic arcade 8-direction text outline + double-halo technique in `outText()` and `drawCursorList()` so menu options stay readable over bright backgrounds without needing a dark box behind them.
+  - Classic arcade 8-direction text outline + double-halo technique in `drawOutlinedText()` and `drawMenuOptions()` so menu options stay readable over bright backgrounds without needing a dark box behind them.
 - **Procedural 8-Bit Sound Effects (`makeTone`)**:
   - [raylib Cheatsheet (`raudio`)](https://www.raylib.com/cheatsheet/cheatsheet.html) and [raylib Examples (`audio_raw_stream.c`)](https://www.raylib.com/examples.html) — `InitAudioDevice`, `Wave`, `MemAlloc`, `LoadSoundFromWave`, `UnloadWave`, `SetMasterVolume`, `SetSoundVolume`, `PlaySound`, and `UnloadSound` generating `22050 Hz` 16-bit mono square, triangle, and LCG-noise (`1103515245u`) tones with linear decay.
 - **2D Platformer Physics, Puzzles & State Machine (`include/game.h`, `src/core.c`)**:
   - **Finite State Machine (`SceneState`)**: 6 scenes (`MENU`, `SETTINGS`, `BRIEFING`, `GAME`, `GAMEOVER`, `VICTORY`), pause overlay, and stage-entry snapshots (`retakeCurrentStage`) so `RETAKE COURSE` cleanly restores GWA/score/papers.
-  - **Separate-Axis AABB Collision & One-Way Ledges (`hit`, `updateStageGameplay`)**: X-axis resolution + crate pushing first, then Y-axis gravity/jumping, with downward-only ledge landing (`vy >= 0 && py + h <= br.y + 8`) for thin platforms (`h < 24px`).
+  - **Separate-Axis AABB Collision & One-Way Ledges (`boxesOverlap`, `movePlayerAndCrateX`, `movePlayerY`)**: X-axis resolution + crate pushing first, then Y-axis gravity/jumping, with downward-only ledge landing (`vy >= 0 && prev_y + h <= plat.y + 8`) for thin platforms (`h < 24px`).
   - **Math & Motion (`<math.h>`)**: `0.55x` gravity scaling in Science 10, sinusoidal bobbing (`sinf`) for collectibles/hazard orbs, and `fabsf`/`floorf`/`ceilf`/`roundf`/`fmaxf` for timer/score/collision math.
 - **C99 Standard Library & Save-File Persistence (`loadProfile`, `saveProfile`)**:
   - `<stdio.h>` (`fopen`, `fscanf`, `fprintf`, `fclose`, `snprintf`) for reading/writing `save_profile.txt`.
-  - `<string.h>`, `<stdbool.h>`, `<stdint.h>` (`memset`, `memcpy`, `strcmp`, `uint32_t` SFX bitmask flags) for decoupling pure logic in `core.c` from raylib rendering in `main.c`.
+  - `<string.h>`, `<stdbool.h>` (`memset`, `memcpy`, `strcmp`, `bool play_sfx[SFX_COUNT]`) for decoupling pure logic in `core.c` from raylib rendering in `main.c`.
 - **Compiler & Build Toolchain (`Makefile`)**:
   - [MSYS2](https://www.msys2.org/) UCRT64 (`mingw-w64-ucrt-x86_64-gcc`, `mingw-w64-ucrt-x86_64-raylib`, GNU `make`) and [raylib (`raysan5/raylib`)](https://github.com/raysan5/raylib), compiled under strict C99 flags (`-std=c99 -Wall -Wextra -Werror -g`) linked with `-lraylib -lopengl32 -lgdi32 -lwinmm -lm`.

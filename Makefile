@@ -4,11 +4,14 @@ LIBS   := -lraylib -lopengl32 -lgdi32 -lwinmm -lm
 
 all: sablay_week3.exe
 
-sablay_week3.exe: src/core.c src/main.c include/game.h
-	$(CC) $(CFLAGS) src/core.c src/main.c -o $@ $(LIBS)
+app.res: assets/app.rc assets/icon.ico
+	windres assets/app.rc -O coff -o $@
+
+sablay_week3.exe: src/core.c src/main.c include/game.h app.res
+	$(CC) $(CFLAGS) src/core.c src/main.c app.res -o $@ $(LIBS)
 
 test: sablay_week3.exe
 	./sablay_week3.exe --smoke-test
 
 clean:
-	rm -f sablay_week3.exe
+	rm -f sablay_week3.exe app.res

@@ -2,6 +2,7 @@
 *.exe
 *.o
 *.out
+*.res
 
 # Local save / runtime files
 save_profile.txt
