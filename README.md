@@ -1,6 +1,6 @@
-# SABLAY — Week 3 Build (`2C1MILL`)
+# SABLAY — 1st Semester Build (`2C1MILL`)
 
-Hey! This is our Week 3 progress build for **SABLAY**, a retro UP Tacloban campus platformer written in **C99** using **raylib 5.5**. Right now the playable build covers up to **Stage 2 (Science 10)**, along with the full menu flow, GWA health mechanics, 8-bit sound effects, and save-file persistence.
+Hey! This is our progress build for **SABLAY**, a retro UP Tacloban campus platformer written in **C99** using **raylib 5.5**. Right now the playable build covers **Stages 1 to 5** (`NSTP 1`, `SCI 10`, `MATH 18`, `CMSC 56`, and `P.E. 1`), along with the full menu flow, GWA health mechanics, 8-bit sound effects, and save-file persistence.
 
 ---
 
@@ -19,6 +19,12 @@ Hey! This is our Week 3 progress build for **SABLAY**, a retro UP Tacloban campu
 2. **Stage 2 — `SCI 10` (`LOW-GRAV`)**:
    - Switches gravity to `0.55x` so Isko floats farther across gap pits.
    - Features `2` oscillating purple hazard orbs, sequential `STEP 1` -> `STEP 2` pressure plates (stepping on `STEP 2` early warns you to hit `STEP 1` first), `2` research papers, and `1` coffee mug.
+3. **Stage 3 — `MATH 18` (`CALCULUS`)**:
+   - Displays the chalkboard equation `x^2 - 5x + 6 = 0`. Jump over the false root `x = 1` (`+0.50` GWA and `+1` slip penalty) and step on the true roots `x = 2` and `x = 3` (`+200` pts each), with optional upper platforms for UP Coffee and Paper `4/7`.
+4. **Stage 4 — `CMSC 56` (`DISCRETE`)**:
+   - Interactive boolean circuit `OUT = (A AND B) OR (NOT C)` starting at `A=0, B=0, C=1`. Climb ladders and step or press `E` on `IN A`, `IN B`, `IN C` to turn the wire trace green (`OUT = 1`), with `2` stress sprites, `2` papers, and UP Coffee.
+5. **Stage 5 — `P.E. 1` (`AGILITY`)**:
+   - Timed `70s` obstacle course: jump over `2` white/red hurdles, dodge/stomp fatigue sprites, climb to ring the balcony `BELL`, and ride `2` blue moving platforms across the floor pit to the exit.
 
 ---
 
@@ -37,7 +43,7 @@ Hey! This is our Week 3 progress build for **SABLAY**, a retro UP Tacloban campu
 - `A / D` or `Left / Right`: Move & push the crate
 - `W / Space / Up`: Jump (or climb up ladders)
 - `S / Down`: Climb down ladders
-- `Enter / Space / E`: Select menu items / confirm briefing
+- `Enter / Space / E`: Select menu items / confirm briefing / toggle CMSC 56 switches
 - `Esc / P` (or click the top-right gear): Pause / Settings
 
 ---

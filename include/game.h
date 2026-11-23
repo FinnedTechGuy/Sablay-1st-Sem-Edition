@@ -7,8 +7,8 @@
 #define SCREEN_H     576
 #define HUD_H        64
 #define TILE_SIZE    32
-#define TOTAL_STAGES 2
-#define TOTAL_PAPERS 3
+#define TOTAL_STAGES 5
+#define TOTAL_PAPERS 7
 #define SAVE_PATH    "save_profile.txt"
 
 typedef struct {
@@ -64,8 +64,21 @@ typedef struct {
 
 typedef struct {
     Rect2D rect;
-    int type;       /* 0 = crate plate, 1 = step 1, 2 = step 2 */
+    bool is_moving;
+    float min_x;
+    float max_x;
+    float move_speed;
+    float move_dir;
+    bool is_hurdle;
+} Platform;
+
+typedef struct {
+    Rect2D rect;
+    int type;       /* 0 = crate, 1 = seq1, 2 = seq2, 3 = math root, 4 = logic input, 5 = bell */
     bool active;
+    bool is_correct;
+    bool player_was_on;
+    int value;
     float cooldown;
     char label[12];
 } Plate;
@@ -102,9 +115,10 @@ typedef struct {
     float time_remaining;
     float banner_timer;
     bool terminal_online;
+    bool logic_inputs[3];
     Rect2D exit_terminal;
 
-    Rect2D platforms[12];
+    Platform platforms[12];
     int platform_count;
     Rect2D ladders[4];
     int ladder_count;
@@ -125,6 +139,7 @@ typedef struct {
     bool up;
     bool down;
     bool jump;
+    bool interact;
 } InputState;
 
 typedef struct {
@@ -166,6 +181,7 @@ void applyPenalty(GameState *game, float gwa_delta, int slip_delta);
 void applyRecovery(GameState *game, float gwa_delta, int points);
 const char *laudeTag(float gwa, bool short_tag);
 const char *laudeQuote(float gwa);
+bool evaluateLogicCircuit(const Stage *stage);
 void loadStageRoom(GameState *game, int course_id);
 void updateStageGameplay(GameState *game, const InputState *input, float dt);
 
