@@ -13,15 +13,10 @@ static Texture2D makePixelTex(Image img) {
     return tex;
 }
 
-static Texture2D loadBg(const char *path, Color fallback) {
-    if (FileExists(path)) {
-        Texture2D tex = LoadTexture(path);
-        if (IsTextureValid(tex)) {
-            SetTextureFilter(tex, TEXTURE_FILTER_BILINEAR);
-            return tex;
-        }
-    }
-    return makePixelTex(GenImageColor(1, 1, fallback));
+static Texture2D loadFilteredTex(const char *path, int filter) {
+    Texture2D tex = LoadTexture(path);
+    SetTextureFilter(tex, filter);
+    return tex;
 }
 
 static Texture2D buildGrassTile(void) {
@@ -29,17 +24,6 @@ static Texture2D buildGrassTile(void) {
     ImageDrawRectangle(&img, 0, 0, 16, 5, (Color){62, 164, 58, 255});
     ImageDrawRectangle(&img, 0, 0, 16, 2, (Color){106, 206, 82, 255});
     return makePixelTex(img);
-}
-
-static Texture2D loadSprite(const char *path, Color fallback) {
-    if (FileExists(path)) {
-        Texture2D tex = LoadTexture(path);
-        if (IsTextureValid(tex)) {
-            SetTextureFilter(tex, TEXTURE_FILTER_POINT);
-            return tex;
-        }
-    }
-    return makePixelTex(GenImageColor(24, 30, fallback));
 }
 
 static Sound makeTone(float start_freq, float end_freq, float duration, int wave_type) {
@@ -228,11 +212,12 @@ static void updateGameInput(GameState *game, bool up, bool down, bool confirm, f
     }
 
     InputState input = {
-        .left  = IsKeyDown(KEY_A) || IsKeyDown(KEY_LEFT),
-        .right = IsKeyDown(KEY_D) || IsKeyDown(KEY_RIGHT),
-        .up    = IsKeyDown(KEY_W) || IsKeyDown(KEY_UP),
-        .down  = IsKeyDown(KEY_S) || IsKeyDown(KEY_DOWN),
-        .jump  = IsKeyPressed(KEY_W) || IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_UP)
+        .left     = IsKeyDown(KEY_A) || IsKeyDown(KEY_LEFT),
+        .right    = IsKeyDown(KEY_D) || IsKeyDown(KEY_RIGHT),
+        .up       = IsKeyDown(KEY_W) || IsKeyDown(KEY_UP),
+        .down     = IsKeyDown(KEY_S) || IsKeyDown(KEY_DOWN),
+        .jump     = IsKeyPressed(KEY_W) || IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_UP),
+        .interact = IsKeyPressed(KEY_E)
     };
     updateStageGameplay(game, &input, dt);
 }
@@ -287,13 +272,48 @@ static void drawGameScreen(const GameState *game, Texture2D stage_bg[2], Texture
     const Stage *stage = &game->stage;
     const Player *player = &game->isko;
 
-    Texture2D sbg = stage_bg[(stage->course_id == 2) ? 1 : 0];
-    DrawTexturePro(sbg, (Rectangle){0, 0, (float)sbg.width, (float)sbg.height},
-                   (Rectangle){0, HUD_H, SCREEN_W, SCREEN_H - HUD_H}, (Vector2){0, 0}, 0.0f, WHITE);
+    if (stage->course_id <= 2) {
+        Texture2D sbg = stage_bg[stage->course_id - 1];
+        DrawTexturePro(sbg, (Rectangle){0, 0, (float)sbg.width, (float)sbg.height},
+                       (Rectangle){0, HUD_H, SCREEN_W, SCREEN_H - HUD_H}, (Vector2){0, 0}, 0.0f, WHITE);
+    } else if (stage->course_id == 3) {
+        DrawRectangleGradientV(0, HUD_H, SCREEN_W, SCREEN_H - HUD_H, (Color){222, 214, 194, 255}, (Color){192, 182, 158, 255});
+        DrawRectangle(286, 80, 388, 68, (Color){26, 78, 48, 255});
+        DrawRectangleLinesEx((Rectangle){286, 80, 388, 68}, 4, (Color){126, 82, 42, 255});
+        drawCenteredText("x^2 - 5x + 6 = 0", 90, 22, RAYWHITE, BLACK);
+        drawCenteredText("Factor & step on the 2 true roots!", 118, 15, GOLD, BLACK);
+    } else if (stage->course_id == 4) {
+        DrawRectangleGradientV(0, HUD_H, SCREEN_W, SCREEN_H - HUD_H, (Color){18, 24, 46, 255}, (Color){28, 38, 72, 255});
+        bool out_ok = evaluateLogicCircuit(stage);
+        Color trace = out_ok ? GREEN : RED;
+        DrawRectangle(215, 78, 530, 68, (Color){14, 18, 32, 225});
+        DrawRectangleLinesEx((Rectangle){215, 78, 530, 68}, 3, trace);
+        DrawLineEx((Vector2){745, 112}, (Vector2){888, 112}, 4, trace);
+        DrawLineEx((Vector2){888, 112}, (Vector2){888, 464}, 4, trace);
+        drawCenteredText("OUT = (A AND B) OR (NOT C)", 88, 20, SKYBLUE, BLACK);
+        drawCenteredText(TextFormat("A=%d   B=%d   C=%d   ->   OUT = %d (%s)",
+                                    stage->logic_inputs[0] ? 1 : 0,
+                                    stage->logic_inputs[1] ? 1 : 0,
+                                    stage->logic_inputs[2] ? 1 : 0,
+                                    out_ok ? 1 : 0, out_ok ? "TRUE" : "FALSE"),
+                         116, 17, out_ok ? GREEN : ORANGE, BLACK);
+    } else {
+        DrawRectangleGradientV(0, HUD_H, SCREEN_W, SCREEN_H - HUD_H, (Color){118, 186, 236, 255}, (Color){186, 224, 248, 255});
+    }
 
     for (int i = 0; i < stage->platform_count; i++) {
-        Rect2D plat = stage->platforms[i];
-        if (plat.y >= 510.0f) {
+        Platform p = stage->platforms[i];
+        Rect2D plat = p.rect;
+        if (p.is_hurdle) {
+            DrawRectangle((int)plat.x, (int)plat.y, (int)plat.w, (int)plat.h, WHITE);
+            DrawRectangle((int)plat.x, (int)plat.y, (int)plat.w, 8, RED);
+            DrawRectangle((int)plat.x, (int)plat.y + 16, (int)plat.w, 6, RED);
+            DrawRectangleLinesEx((Rectangle){plat.x, plat.y, plat.w, plat.h}, 2, BLACK);
+        } else if (p.is_moving) {
+            DrawRectangleRec((Rectangle){plat.x, plat.y, plat.w, plat.h}, (Color){36, 108, 204, 255});
+            DrawRectangle((int)plat.x, (int)plat.y, (int)plat.w, 5, SKYBLUE);
+            DrawRectangleLinesEx((Rectangle){plat.x, plat.y, plat.w, plat.h}, 2, BLACK);
+        } else if (plat.y >= 510.0f) {
             for (int tx = (int)plat.x; tx < (int)(plat.x + plat.w); tx += TILE_SIZE) {
                 for (int ty = (int)plat.y; ty < (int)(plat.y + plat.h); ty += TILE_SIZE) {
                     DrawTexturePro(tile, (Rectangle){0, 0, 16, 16}, (Rectangle){(float)tx, (float)ty, TILE_SIZE, TILE_SIZE}, (Vector2){0, 0}, 0.0f, WHITE);
@@ -453,7 +473,7 @@ static void drawVictoryScreen(const GameState *game, Texture2D bg) {
     DrawRectangle(0, 18, SCREEN_W, 6, GOLD);
 
     DrawRectangle(90, 96, SCREEN_W - 180, 356, (Color){16, 18, 28, 200});
-    drawCenteredText("WEEK 3 CLEARED!", 126, 44, GOLD, MAROON);
+    drawCenteredText("STAGES 1-5 CLEARED!", 126, 44, GOLD, MAROON);
     drawCenteredText(TextFormat("FINAL GWA: %.2f %s", (double)game->isko.gwa, laudeTag(game->isko.gwa, false)), 196, 28, SKYBLUE, BLACK);
     drawCenteredText(laudeQuote(game->isko.gwa), 258, 20, RAYWHITE, BLACK);
     drawCenteredText(TextFormat("Final Score: %06d", game->total_score), 324, 30, GOLD, BLACK);
@@ -469,7 +489,7 @@ int main(int argc, char **argv) {
     game.settings_back = SCENE_MENU;
 
     if (smoke) SetConfigFlags(FLAG_WINDOW_HIDDEN);
-    InitWindow(SCREEN_W, SCREEN_H, "SABLAY - Week 3 Milestone (NSTP 1 & Science 10)");
+    InitWindow(SCREEN_W, SCREEN_H, "SABLAY - 1st Semester Edition");
     if (FileExists("assets/icon.png")) {
         Image icon = LoadImage("assets/icon.png");
         ImageFormat(&icon, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
@@ -483,17 +503,17 @@ int main(int argc, char **argv) {
     bool audio_ok = IsAudioDeviceReady();
     if (audio_ok) SetMasterVolume((float)game.master_volume / 100.0f);
 
-    Texture2D bg = loadBg("assets/campus_bg.jpg", (Color){42, 68, 96, 255});
+    Texture2D bg = loadFilteredTex("assets/campus_bg.jpg", TEXTURE_FILTER_BILINEAR);
     Texture2D stage_bg[2] = {
-        loadBg("assets/stage1_bg.png", (Color){126, 188, 232, 255}),
-        loadBg("assets/stage2_bg.png", (Color){22, 28, 66, 255})
+        loadFilteredTex("assets/stage1_bg.jpg", TEXTURE_FILTER_BILINEAR),
+        loadFilteredTex("assets/stage2_bg.jpg", TEXTURE_FILTER_BILINEAR)
     };
     Texture2D tile = buildGrassTile();
     Texture2D isko[4] = {
-        loadSprite("assets/isko_idle.png", MAROON),
-        loadSprite("assets/isko_run1.png", MAROON),
-        loadSprite("assets/isko_run2.png", MAROON),
-        loadSprite("assets/isko_jump.png", MAROON)
+        loadFilteredTex("assets/isko_idle.png", TEXTURE_FILTER_POINT),
+        loadFilteredTex("assets/isko_run1.png", TEXTURE_FILTER_POINT),
+        loadFilteredTex("assets/isko_run2.png", TEXTURE_FILTER_POINT),
+        loadFilteredTex("assets/isko_jump.png", TEXTURE_FILTER_POINT)
     };
 
     Sound sfx[SFX_COUNT] = {0};

@@ -144,7 +144,42 @@ const char *laudeQuote(float gwa) {
     return "A pass is a pass.";
 }
 
-/* ---------- Course Setup (NSTP 1 & Science 10) ---------- */
+/* ---------- Stages 1-5 Setup & Helpers ---------- */
+
+bool evaluateLogicCircuit(const Stage *stage) {
+    bool a = stage->logic_inputs[0];
+    bool b = stage->logic_inputs[1];
+    bool c = stage->logic_inputs[2];
+    return (a && b) || (!c);
+}
+
+static void addPlatform(Stage *stage, float x, float y, float w, float h) {
+    if (stage->platform_count >= 12) return;
+    Platform *plat = &stage->platforms[stage->platform_count++];
+    memset(plat, 0, sizeof(*plat));
+    plat->rect = (Rect2D){x, y, w, h};
+}
+
+static void addMovingPlatform(Stage *stage, float x, float y, float w, float h,
+                              float min_x, float max_x, float speed, float dir) {
+    if (stage->platform_count >= 12) return;
+    Platform *plat = &stage->platforms[stage->platform_count++];
+    memset(plat, 0, sizeof(*plat));
+    plat->rect = (Rect2D){x, y, w, h};
+    plat->is_moving = true;
+    plat->min_x = min_x;
+    plat->max_x = max_x;
+    plat->move_speed = speed;
+    plat->move_dir = dir;
+}
+
+static void addHurdle(Stage *stage, float x, float y, float w, float h) {
+    if (stage->platform_count >= 12) return;
+    Platform *plat = &stage->platforms[stage->platform_count++];
+    memset(plat, 0, sizeof(*plat));
+    plat->rect = (Rect2D){x, y, w, h};
+    plat->is_hurdle = true;
+}
 
 static void addCollectible(GameState *game, int kind, float x, float y, int paper_id) {
     if (kind == 0 && game->paper_flags[paper_id]) {
@@ -169,7 +204,7 @@ void loadStageRoom(GameState *game, int course_id) {
     memset(stage, 0, sizeof(*stage));
 
     stage->course_id = course_id;
-    stage->gravity_scale = (course_id == 1) ? 1.0f : 0.55f;
+    stage->gravity_scale = (course_id == 2) ? 0.55f : 1.0f;
 
     /* Snapshot player stats so RETAKE COURSE can rewind cleanly */
     game->entry_gwa = (game->isko.gwa >= 4.999f) ? 1.00f : game->isko.gwa;
@@ -196,10 +231,9 @@ void loadStageRoom(GameState *game, int course_id) {
         stage->time_limit = 90.0f;
         stage->time_remaining = 90.0f;
 
-        stage->platforms[0] = (Rect2D){0, 512, 960, 64};
-        stage->platforms[1] = (Rect2D){140, 412, 220, 20};
-        stage->platforms[2] = (Rect2D){520, 352, 380, 20};
-        stage->platform_count = 3;
+        addPlatform(stage, 0, 512, 960, 64);
+        addPlatform(stage, 140, 412, 220, 20);
+        addPlatform(stage, 520, 352, 380, 20);
 
         stage->ladders[0] = (Rect2D){160, 412, 28, 100};
         stage->ladders[1] = (Rect2D){550, 352, 28, 160};
@@ -208,7 +242,7 @@ void loadStageRoom(GameState *game, int course_id) {
         stage->has_crate = true;
         stage->crate = (Rect2D){290, 480, 30, 30};
 
-        stage->plates[0] = (Plate){{420, 502, 42, 10}, 0, false, 0.0f, "CRATE"};
+        stage->plates[0] = (Plate){.rect = {420, 502, 42, 10}, .type = 0, .label = "CRATE"};
         stage->plate_count = 1;
 
         stage->exit_terminal = (Rect2D){836, 304, 36, 48};
@@ -225,16 +259,17 @@ void loadStageRoom(GameState *game, int course_id) {
         stage->time_limit = 95.0f;
         stage->time_remaining = 95.0f;
 
-        Rect2D lab_platforms[8] = {
-            {0, 512, 300, 64},   {420, 512, 220, 64}, {740, 512, 220, 64},
-            {200, 404, 160, 20}, {440, 308, 180, 20}, {170, 212, 180, 20},
-            {470, 412, 120, 20}, {690, 240, 230, 20}
-        };
-        memcpy(stage->platforms, lab_platforms, sizeof(lab_platforms));
-        stage->platform_count = 8;
+        addPlatform(stage, 0, 512, 300, 64);
+        addPlatform(stage, 420, 512, 220, 64);
+        addPlatform(stage, 740, 512, 220, 64);
+        addPlatform(stage, 200, 404, 160, 20);
+        addPlatform(stage, 440, 308, 180, 20);
+        addPlatform(stage, 170, 212, 180, 20);
+        addPlatform(stage, 470, 412, 120, 20);
+        addPlatform(stage, 690, 240, 230, 20);
 
-        stage->plates[0] = (Plate){{510, 298, 42, 10}, 1, false, 0.0f, "STEP 1"};
-        stage->plates[1] = (Plate){{720, 230, 42, 10}, 2, false, 0.0f, "STEP 2"};
+        stage->plates[0] = (Plate){.rect = {510, 298, 42, 10}, .type = 1, .label = "STEP 1"};
+        stage->plates[1] = (Plate){.rect = {720, 230, 42, 10}, .type = 2, .label = "STEP 2"};
         stage->plate_count = 2;
 
         stage->exit_terminal = (Rect2D){860, 192, 36, 48};
@@ -246,40 +281,104 @@ void loadStageRoom(GameState *game, int course_id) {
         addCollectible(game, 0, 520, 374, 2);
         addCollectible(game, 1, 515, 478, -1);
     } else if (course_id == 3) {
-                snprintf(stage->code, sizeof(stage->code), "SCI 10");
-        snprintf(stage->subtitle, sizeof(stage->subtitle), "LOW-GRAV");
-        snprintf(stage->title, sizeof(stage->title), "Science 10: Low-Gravity Physics Lab");
-        snprintf(stage->hint, sizeof(stage->hint), "0.55x Gravity! Trigger Plate [1] then Plate [2] for Exit!");
-        stage->time_limit = 95.0f;
-        stage->time_remaining = 95.0f;
+        snprintf(stage->code, sizeof(stage->code), "MATH 18");
+        snprintf(stage->subtitle, sizeof(stage->subtitle), "CALCULUS");
+        snprintf(stage->title, sizeof(stage->title), "Math 18: Solve x^2 - 5x + 6 = 0");
+        snprintf(stage->hint, sizeof(stage->hint), "Jump over false root x=1! Step on the two true roots.");
+        stage->time_limit = 100.0f;
+        stage->time_remaining = 100.0f;
 
-        Rect2D lab_platforms[8] = {
-            {0, 512, 300, 64},   {420, 512, 220, 64}, {740, 512, 220, 64},
-            {200, 404, 160, 20}, {440, 308, 180, 20}, {170, 212, 180, 20},
-            {470, 412, 120, 20}, {690, 240, 230, 20}
-        };
-        memcpy(stage->platforms, lab_platforms, sizeof(lab_platforms));
-        stage->platform_count = 8;
+        addPlatform(stage, 0, 512, 960, 64);
+        addPlatform(stage, 100, 396, 150, 20);
+        addPlatform(stage, 350, 356, 190, 20);
 
-        stage->plates[0] = (Plate){{510, 298, 42, 10}, 1, false, 0.0f, "STEP 1"};
-        stage->plates[1] = (Plate){{720, 230, 42, 10}, 2, false, 0.0f, "STEP 2"};
-        stage->plate_count = 2;
+        stage->ladders[0] = (Rect2D){130, 396, 28, 116};
+        stage->ladders[1] = (Rect2D){390, 356, 28, 156};
+        stage->ladder_count = 2;
 
-        stage->exit_terminal = (Rect2D){860, 192, 36, 48};
-        stage->hazards[0] = (Hazard){{370, 336, 26, 26}, 1, 65.0f, 310.0f, 430.0f, 336.0f, 0.0f, true};
-        stage->hazards[1] = (Hazard){{635, 250, 26, 26}, 1, 70.0f, 595.0f, 680.0f, 250.0f, 0.0f, true};
+        stage->plates[0] = (Plate){.rect = {230, 502, 42, 10}, .type = 3, .is_correct = false, .value = 1, .label = "x = 1"};
+        stage->plates[1] = (Plate){.rect = {460, 502, 42, 10}, .type = 3, .is_correct = true,  .value = 2, .label = "x = 2"};
+        stage->plates[2] = (Plate){.rect = {690, 502, 42, 10}, .type = 3, .is_correct = true,  .value = 3, .label = "x = 3"};
+        stage->plate_count = 3;
+
+        stage->exit_terminal = (Rect2D){870, 464, 36, 48};
+        stage->hazards[0] = (Hazard){{290, 486, 26, 26}, 0, 75.0f, 290.0f, 440.0f, 486.0f, 0.0f, true};
+        stage->hazards[1] = (Hazard){{520, 486, 26, 26}, 0, -75.0f, 520.0f, 670.0f, 486.0f, 0.0f, true};
         stage->hazard_count = 2;
 
-        addCollectible(game, 0, 245, 174, 1);
-        addCollectible(game, 0, 520, 374, 2);
-        addCollectible(game, 1, 515, 478, -1);
+        addCollectible(game, 1, 180, 364, -1);
+        addCollectible(game, 0, 470, 318, 3);
+    } else if (course_id == 4) {
+        snprintf(stage->code, sizeof(stage->code), "CMSC 56");
+        snprintf(stage->subtitle, sizeof(stage->subtitle), "DISCRETE");
+        snprintf(stage->title, sizeof(stage->title), "CMSC 56: Discrete Logic Circuits");
+        snprintf(stage->hint, sizeof(stage->hint), "Make OUT = (A AND B) OR (NOT C) = 1! Step or press E.");
+        stage->time_limit = 110.0f;
+        stage->time_remaining = 110.0f;
+
+        stage->logic_inputs[0] = false;
+        stage->logic_inputs[1] = false;
+        stage->logic_inputs[2] = true;
+
+        addPlatform(stage, 0, 512, 960, 64);
+        addPlatform(stage, 80, 392, 220, 20);
+        addPlatform(stage, 320, 332, 270, 20);
+        addPlatform(stage, 620, 392, 240, 20);
+
+        stage->ladders[0] = (Rect2D){100, 392, 28, 120};
+        stage->ladders[1] = (Rect2D){640, 392, 28, 120};
+        stage->ladders[2] = (Rect2D){340, 332, 28, 180};
+        stage->ladder_count = 3;
+
+        stage->plates[0] = (Plate){.rect = {190, 382, 54, 10}, .type = 4, .active = false, .value = 0, .label = "IN A=0"};
+        stage->plates[1] = (Plate){.rect = {730, 382, 54, 10}, .type = 4, .active = false, .value = 1, .label = "IN B=0"};
+        stage->plates[2] = (Plate){.rect = {450, 322, 54, 10}, .type = 4, .active = true,  .value = 2, .label = "IN C=1"};
+        stage->plate_count = 3;
+
+        stage->exit_terminal = (Rect2D){870, 464, 36, 48};
+        stage->hazards[0] = (Hazard){{200, 486, 26, 26}, 0, 80.0f, 150.0f, 420.0f, 486.0f, 0.0f, true};
+        stage->hazards[1] = (Hazard){{560, 486, 26, 26}, 0, -80.0f, 460.0f, 780.0f, 486.0f, 0.0f, true};
+        stage->hazard_count = 2;
+
+        addCollectible(game, 0, 118, 354, 4);
+        addCollectible(game, 0, 814, 354, 5);
+        addCollectible(game, 1, 540, 298, -1);
+    } else {
+        snprintf(stage->code, sizeof(stage->code), "P.E. 1");
+        snprintf(stage->subtitle, sizeof(stage->subtitle), "AGILITY");
+        snprintf(stage->title, sizeof(stage->title), "P.E. 1: Hurdles & Agility Course");
+        snprintf(stage->hint, sizeof(stage->hint), "Jump hurdles, ring the balcony BELL, cross the pit in 70s!");
+        stage->time_limit = 70.0f;
+        stage->time_remaining = 70.0f;
+
+        addPlatform(stage, 0, 512, 460, 64);
+        addPlatform(stage, 740, 512, 220, 64);
+        addPlatform(stage, 120, 372, 290, 20);
+        addMovingPlatform(stage, 470, 412, 90, 18, 470.0f, 630.0f, 80.0f, 1.0f);
+        addMovingPlatform(stage, 635, 456, 90, 18, 420.0f, 635.0f, 95.0f, -1.0f);
+        addHurdle(stage, 160, 484, 14, 28);
+        addHurdle(stage, 290, 484, 14, 28);
+
+        stage->ladders[0] = (Rect2D){370, 372, 28, 140};
+        stage->ladder_count = 1;
+
+        stage->plates[0] = (Plate){.rect = {210, 362, 46, 10}, .type = 5, .label = "BELL"};
+        stage->plate_count = 1;
+
+        stage->exit_terminal = (Rect2D){870, 464, 36, 48};
+        stage->hazards[0] = (Hazard){{200, 486, 26, 26}, 0, 65.0f, 185.0f, 280.0f, 486.0f, 0.0f, true};
+        stage->hazards[1] = (Hazard){{760, 486, 26, 26}, 0, 70.0f, 750.0f, 850.0f, 486.0f, 0.0f, true};
+        stage->hazard_count = 2;
+
+        addCollectible(game, 0, 160, 334, 6);
+        addCollectible(game, 1, 325, 338, -1);
     }
 
     game->isko.x = game->isko.spawn_x;
     game->isko.y = game->isko.spawn_y;
 }
 
-/* ---------- Gameplay Helpers ---------- */
+/* ---------- Gameplay Helpers (One Job Each) ---------- */
 
 static void handleLadderAndJump(GameState *game, const InputState *input, float gravity, float dt) {
     Stage *stage = &game->stage;
@@ -332,13 +431,41 @@ static void handleLadderAndJump(GameState *game, const InputState *input, float 
     }
 }
 
+static void updateMovingPlatforms(Stage *stage, Player *player, float dt) {
+    for (int i = 0; i < stage->platform_count; i++) {
+        Platform *plat = &stage->platforms[i];
+        if (!plat->is_moving) {
+            continue;
+        }
+
+        float old_x = plat->rect.x;
+        plat->rect.x += plat->move_dir * plat->move_speed * dt;
+        if (plat->rect.x <= plat->min_x) {
+            plat->rect.x = plat->min_x;
+            plat->move_dir = 1.0f;
+        } else if (plat->rect.x >= plat->max_x) {
+            plat->rect.x = plat->max_x;
+            plat->move_dir = -1.0f;
+        }
+
+        float delta_x = plat->rect.x - old_x;
+        bool on_top = player->is_grounded &&
+                      (player->x + player->w > old_x) &&
+                      (player->x < old_x + plat->rect.w) &&
+                      (fabsf((player->y + player->h) - plat->rect.y) <= 4.0f);
+        if (on_top) {
+            player->x = clampFloat(player->x + delta_x, 4.0f, (float)SCREEN_W - 4.0f - player->w);
+        }
+    }
+}
+
 static void movePlayerAndCrateX(Stage *stage, Player *player, float gravity, float dt) {
     float prev_x = player->x;
     player->x = clampFloat(player->x + player->vx * dt, 4.0f, (float)SCREEN_W - 4.0f - player->w);
     Rect2D player_box = {player->x, player->y, player->w, player->h};
 
     for (int i = 0; i < stage->platform_count; i++) {
-        Rect2D plat = stage->platforms[i];
+        Rect2D plat = stage->platforms[i].rect;
         if (boxesOverlap(player_box, plat) && plat.h >= 24.0f) {
             if (prev_x + player->w <= plat.x + 2.0f) {
                 player->x = plat.x - player->w;
@@ -365,8 +492,9 @@ static void movePlayerAndCrateX(Stage *stage, Player *player, float gravity, flo
     stage->crate_vy += gravity * dt;
     stage->crate.y += stage->crate_vy * dt;
     for (int i = 0; i < stage->platform_count; i++) {
-        if (boxesOverlap(stage->crate, stage->platforms[i]) && stage->crate_vy >= 0.0f) {
-            stage->crate.y = stage->platforms[i].y - stage->crate.h;
+        Rect2D plat = stage->platforms[i].rect;
+        if (boxesOverlap(stage->crate, plat) && stage->crate_vy >= 0.0f) {
+            stage->crate.y = plat.y - stage->crate.h;
             stage->crate_vy = 0.0f;
         }
     }
@@ -379,7 +507,7 @@ static void movePlayerY(GameState *game, Stage *stage, Player *player, float pre
 
     if (!player->on_ladder || player->vy >= 0.0f) {
         for (int i = 0; i < stage->platform_count; i++) {
-            Rect2D plat = stage->platforms[i];
+            Rect2D plat = stage->platforms[i].rect;
             if (!boxesOverlap(player_box, plat)) {
                 continue;
             }
@@ -484,7 +612,7 @@ static void updateHazards(GameState *game, Stage *stage, Player *player, float p
     }
 }
 
-static void checkPlatesAndExit(GameState *game, Stage *stage, Player *player, float dt) {
+static void checkPlatesAndExit(GameState *game, Stage *stage, Player *player, const InputState *input, float dt) {
     Rect2D player_box = {player->x, player->y, player->w, player->h};
 
     for (int i = 0; i < stage->plate_count; i++) {
@@ -494,18 +622,19 @@ static void checkPlatesAndExit(GameState *game, Stage *stage, Player *player, fl
         }
 
         Rect2D trigger_zone = {plate->rect.x, plate->rect.y - 6.0f, plate->rect.w, plate->rect.h + 8.0f};
+        bool player_on = boxesOverlap(player_box, trigger_zone);
 
         if (plate->type == 0 && !plate->active && stage->has_crate && boxesOverlap(stage->crate, trigger_zone)) {
             plate->active = true;
             stage->terminal_online = true;
             game->play_sfx[SFX_SWITCH] = true;
             showBanner(stage, "TERMINAL ONLINE! Head to the Exit!");
-        } else if (plate->type == 1 && !plate->active && boxesOverlap(player_box, trigger_zone)) {
+        } else if (plate->type == 1 && !plate->active && player_on) {
             plate->active = true;
             stage->seq_step = 1;
             game->play_sfx[SFX_SWITCH] = true;
             showBanner(stage, "Plate [1] Online! Activate Plate [2]!");
-        } else if (plate->type == 2 && !plate->active && boxesOverlap(player_box, trigger_zone)) {
+        } else if (plate->type == 2 && !plate->active && player_on) {
             if (stage->seq_step >= 1) {
                 plate->active = true;
                 stage->terminal_online = true;
@@ -516,7 +645,56 @@ static void checkPlatesAndExit(GameState *game, Stage *stage, Player *player, fl
                 plate->cooldown = 1.5f;
                 showBanner(stage, "Activate Plate [1] first!");
             }
+        } else if (plate->type == 3 && player_on) {
+            if (!plate->is_correct) {
+                if (plate->cooldown <= 0.0f) {
+                    applyPenalty(game, 0.50f, 1);
+                    plate->cooldown = 1.5f;
+                    showBanner(stage, "FALSE ROOT! x=1 fails! +0.50 GWA & 1 Slip!");
+                }
+            } else if (!plate->active) {
+                plate->active = true;
+                game->total_score += 200;
+                game->play_sfx[SFX_SWITCH] = true;
+
+                bool all_roots_found = true;
+                for (int j = 0; j < stage->plate_count; j++) {
+                    if (stage->plates[j].type == 3 && stage->plates[j].is_correct && !stage->plates[j].active) {
+                        all_roots_found = false;
+                    }
+                }
+                if (all_roots_found) {
+                    stage->terminal_online = true;
+                    showBanner(stage, "ROOTS x=2, x=3 SOLVED! Exit ONLINE!");
+                } else {
+                    showBanner(stage, "ROOT FOUND (+200 PTS)! Find the other root!");
+                }
+            }
+        } else if (plate->type == 4 && player_on) {
+            bool fresh_step = !plate->player_was_on && (plate->cooldown <= 0.0f);
+            if (input->interact || fresh_step) {
+                int idx = plate->value;
+                stage->logic_inputs[idx] = !stage->logic_inputs[idx];
+                plate->active = stage->logic_inputs[idx];
+                plate->cooldown = 0.25f;
+                snprintf(plate->label, sizeof(plate->label), "IN %c=%d", 'A' + idx, plate->active ? 1 : 0);
+                game->play_sfx[SFX_SWITCH] = true;
+
+                stage->terminal_online = evaluateLogicCircuit(stage);
+                if (stage->terminal_online) {
+                    showBanner(stage, "OUT = 1 (TRUE)! Exit Terminal ONLINE!");
+                } else {
+                    showBanner(stage, "OUT = 0 (FALSE). Adjust A, B, or C!");
+                }
+            }
+        } else if (plate->type == 5 && !plate->active && player_on) {
+            plate->active = true;
+            stage->terminal_online = true;
+            game->play_sfx[SFX_SWITCH] = true;
+            showBanner(stage, "BELL RUNG! Cross the moving platforms!");
         }
+
+        plate->player_was_on = player_on;
     }
 
     if (player->gwa >= 4.999f || player->slips >= 3) {
@@ -572,10 +750,11 @@ void updateStageGameplay(GameState *game, const InputState *input, float dt) {
     float gravity = 980.0f * stage->gravity_scale;
     float prev_y = player->y;
 
+    updateMovingPlatforms(stage, player, dt);
     handleLadderAndJump(game, input, gravity, dt);
     movePlayerAndCrateX(stage, player, gravity, dt);
     movePlayerY(game, stage, player, prev_y, dt);
     updateCollectibles(game, stage, player, dt);
     updateHazards(game, stage, player, prev_y, dt);
-    checkPlatesAndExit(game, stage, player, dt);
+    checkPlatesAndExit(game, stage, player, input, dt);
 }
