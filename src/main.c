@@ -268,22 +268,31 @@ static void drawBriefingScreen(const GameState *game, Texture2D bg) {
     drawCenteredText("PRESS [ENTER] OR [E] TO BEGIN COURSE", 376, 22, GOLD, BLACK);
 }
 
-static void drawGameScreen(const GameState *game, Texture2D stage_bg[2], Texture2D tile, Texture2D isko[4]) {
+static void drawGameScreen(const GameState *game, Texture2D stage_bg[TOTAL_STAGES], Texture2D tile, Texture2D isko[4]) {
     const Stage *stage = &game->stage;
     const Player *player = &game->isko;
 
-    if (stage->course_id <= 2) {
+    bool has_stage_bg = stage->course_id >= 1 &&
+                        stage->course_id <= TOTAL_STAGES &&
+                        stage_bg[stage->course_id - 1].id != 0;
+    if (has_stage_bg) {
         Texture2D sbg = stage_bg[stage->course_id - 1];
         DrawTexturePro(sbg, (Rectangle){0, 0, (float)sbg.width, (float)sbg.height},
                        (Rectangle){0, HUD_H, SCREEN_W, SCREEN_H - HUD_H}, (Vector2){0, 0}, 0.0f, WHITE);
     } else if (stage->course_id == 3) {
         DrawRectangleGradientV(0, HUD_H, SCREEN_W, SCREEN_H - HUD_H, (Color){222, 214, 194, 255}, (Color){192, 182, 158, 255});
+    } else if (stage->course_id == 4) {
+        DrawRectangleGradientV(0, HUD_H, SCREEN_W, SCREEN_H - HUD_H, (Color){18, 24, 46, 255}, (Color){28, 38, 72, 255});
+    } else {
+        DrawRectangleGradientV(0, HUD_H, SCREEN_W, SCREEN_H - HUD_H, (Color){118, 186, 236, 255}, (Color){186, 224, 248, 255});
+    }
+
+    if (stage->course_id == 3) {
         DrawRectangle(286, 80, 388, 68, (Color){26, 78, 48, 255});
         DrawRectangleLinesEx((Rectangle){286, 80, 388, 68}, 4, (Color){126, 82, 42, 255});
         drawCenteredText("x^2 - 5x + 6 = 0", 90, 22, RAYWHITE, BLACK);
         drawCenteredText("Factor & step on the 2 true roots!", 118, 15, GOLD, BLACK);
     } else if (stage->course_id == 4) {
-        DrawRectangleGradientV(0, HUD_H, SCREEN_W, SCREEN_H - HUD_H, (Color){18, 24, 46, 255}, (Color){28, 38, 72, 255});
         bool out_ok = evaluateLogicCircuit(stage);
         Color trace = out_ok ? GREEN : RED;
         DrawRectangle(215, 78, 530, 68, (Color){14, 18, 32, 225});
@@ -297,8 +306,6 @@ static void drawGameScreen(const GameState *game, Texture2D stage_bg[2], Texture
                                     stage->logic_inputs[2] ? 1 : 0,
                                     out_ok ? 1 : 0, out_ok ? "TRUE" : "FALSE"),
                          116, 17, out_ok ? GREEN : ORANGE, BLACK);
-    } else {
-        DrawRectangleGradientV(0, HUD_H, SCREEN_W, SCREEN_H - HUD_H, (Color){118, 186, 236, 255}, (Color){186, 224, 248, 255});
     }
 
     for (int i = 0; i < stage->platform_count; i++) {
@@ -504,9 +511,12 @@ int main(int argc, char **argv) {
     if (audio_ok) SetMasterVolume((float)game.master_volume / 100.0f);
 
     Texture2D bg = loadFilteredTex("assets/campus_bg.jpg", TEXTURE_FILTER_BILINEAR);
-    Texture2D stage_bg[2] = {
+    Texture2D stage_bg[TOTAL_STAGES] = {
         loadFilteredTex("assets/stage1_bg.jpg", TEXTURE_FILTER_BILINEAR),
-        loadFilteredTex("assets/stage2_bg.jpg", TEXTURE_FILTER_BILINEAR)
+        loadFilteredTex("assets/stage2_bg.jpg", TEXTURE_FILTER_BILINEAR),
+        loadFilteredTex("assets/stage3_bg.png", TEXTURE_FILTER_BILINEAR),
+        loadFilteredTex("assets/stage4_bg.png", TEXTURE_FILTER_BILINEAR),
+        loadFilteredTex("assets/stage5_bg.png", TEXTURE_FILTER_BILINEAR)
     };
     Texture2D tile = buildGrassTile();
     Texture2D isko[4] = {
@@ -593,8 +603,9 @@ int main(int argc, char **argv) {
     }
 
     UnloadTexture(bg);
-    UnloadTexture(stage_bg[0]);
-    UnloadTexture(stage_bg[1]);
+    for (int i = 0; i < TOTAL_STAGES; i++) {
+        UnloadTexture(stage_bg[i]);
+    }
     UnloadTexture(tile);
     for (int i = 0; i < 4; i++) {
         UnloadTexture(isko[i]);

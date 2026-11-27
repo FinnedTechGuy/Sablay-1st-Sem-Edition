@@ -41,6 +41,7 @@ typedef enum {
     SFX_COUNT
 } SfxId;
 
+// Player
 typedef struct {
     float x;
     float y;
@@ -62,6 +63,7 @@ typedef struct {
     int stomp_streak;
 } Player;
 
+//Plates 
 typedef struct {
     Rect2D rect;
     bool is_moving;
