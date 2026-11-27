@@ -144,7 +144,7 @@ const char *laudeQuote(float gwa) {
     return "A pass is a pass.";
 }
 
-/* ---------- Stage Setup (NSTP 1 & Science 10) ---------- */
+/* ---------- Course Setup (NSTP 1 & Science 10) ---------- */
 
 static void addCollectible(GameState *game, int kind, float x, float y, int paper_id) {
     if (kind == 0 && game->paper_flags[paper_id]) {
@@ -217,8 +217,36 @@ void loadStageRoom(GameState *game, int course_id) {
 
         addCollectible(game, 0, 240, 374, 0);
         addCollectible(game, 1, 96, 478, -1);
-    } else {
+    } else if (course_id == 2) {
         snprintf(stage->code, sizeof(stage->code), "SCI 10");
+        snprintf(stage->subtitle, sizeof(stage->subtitle), "LOW-GRAV");
+        snprintf(stage->title, sizeof(stage->title), "Science 10: Low-Gravity Physics Lab");
+        snprintf(stage->hint, sizeof(stage->hint), "0.55x Gravity! Trigger Plate [1] then Plate [2] for Exit!");
+        stage->time_limit = 95.0f;
+        stage->time_remaining = 95.0f;
+
+        Rect2D lab_platforms[8] = {
+            {0, 512, 300, 64},   {420, 512, 220, 64}, {740, 512, 220, 64},
+            {200, 404, 160, 20}, {440, 308, 180, 20}, {170, 212, 180, 20},
+            {470, 412, 120, 20}, {690, 240, 230, 20}
+        };
+        memcpy(stage->platforms, lab_platforms, sizeof(lab_platforms));
+        stage->platform_count = 8;
+
+        stage->plates[0] = (Plate){{510, 298, 42, 10}, 1, false, 0.0f, "STEP 1"};
+        stage->plates[1] = (Plate){{720, 230, 42, 10}, 2, false, 0.0f, "STEP 2"};
+        stage->plate_count = 2;
+
+        stage->exit_terminal = (Rect2D){860, 192, 36, 48};
+        stage->hazards[0] = (Hazard){{370, 336, 26, 26}, 1, 65.0f, 310.0f, 430.0f, 336.0f, 0.0f, true};
+        stage->hazards[1] = (Hazard){{635, 250, 26, 26}, 1, 70.0f, 595.0f, 680.0f, 250.0f, 0.0f, true};
+        stage->hazard_count = 2;
+
+        addCollectible(game, 0, 245, 174, 1);
+        addCollectible(game, 0, 520, 374, 2);
+        addCollectible(game, 1, 515, 478, -1);
+    } else if (course_id == 3) {
+                snprintf(stage->code, sizeof(stage->code), "SCI 10");
         snprintf(stage->subtitle, sizeof(stage->subtitle), "LOW-GRAV");
         snprintf(stage->title, sizeof(stage->title), "Science 10: Low-Gravity Physics Lab");
         snprintf(stage->hint, sizeof(stage->hint), "0.55x Gravity! Trigger Plate [1] then Plate [2] for Exit!");
@@ -251,7 +279,7 @@ void loadStageRoom(GameState *game, int course_id) {
     game->isko.y = game->isko.spawn_y;
 }
 
-/* ---------- Gameplay Helpers (One Job Each) ---------- */
+/* ---------- Gameplay Helpers ---------- */
 
 static void handleLadderAndJump(GameState *game, const InputState *input, float gravity, float dt) {
     Stage *stage = &game->stage;
