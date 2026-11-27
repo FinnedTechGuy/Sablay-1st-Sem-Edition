@@ -56,6 +56,9 @@ Sablay-1st-Sem-Edition/
 │   ├── campus_bg.jpg        # Main Menu + Settings/Briefing/Endings backdrop (1024x576)
 │   ├── stage1_bg.jpg        # Stage 1 (NSTP 1) playfield backdrop
 │   ├── stage2_bg.jpg        # Stage 2 (Science 10) playfield backdrop
+│   ├── stage3_bg.png        # Stage 3 (Math 18) playfield backdrop
+│   ├── stage4_bg.png        # Stage 4 (CMSC 56) playfield backdrop
+│   ├── stage5_bg.png        # Stage 5 (P.E. 1) playfield backdrop
 │   ├── icon.png             # Transparent 256x256 window/taskbar icon (cropped PNG)
 │   ├── icon.ico             # Windows Explorer .exe icon wrapper
 │   ├── app.rc               # Windows resource script embedding icon.ico
